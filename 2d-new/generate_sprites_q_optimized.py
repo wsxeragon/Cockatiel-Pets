@@ -357,7 +357,8 @@ def generate_optimized_suite():
         "bite_1": bird_q_optimized(head=(-3, 0), crest="alert", eye="wide", mouth="bite"),
         
         # 哈气
-        "hiss_0": bird_q_optimized(head=(-2, 2), crest="alert", eye="wide", mouth="hiss"),
+        "hiss_0": bird_q_optimized(head=(-2, 2), puff=2, crest="alert", eye="wide", mouth="hiss"),
+        "hiss_1": bird_q_optimized(head=(-4, 4), puff=5, crest="alert", eye="wide", mouth="hiss", lift=-1),
         
         # 飞行 (小短腿紧贴肚皮，3段流线型扑翼)
         "fly_0": bird_q_optimized(wing="fly_up", lift=-5, crest="alert", tuck_feet=True),

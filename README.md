@@ -4,7 +4,7 @@
 
 拥有**透明通道无边框置顶窗口**、**四维心态动力学引擎**、**丰富生物习性微表情**与**心理雷达监视器**。
 
-本人不懂美术，做不出流畅的动画和精美的形象
+新手练习作品，缺少精美的美术和流畅的动作
 <img width="166" height="143" alt="image" src="https://github.com/user-attachments/assets/8a5cd7fd-a008-4ef4-b6cf-9272aeb5ac1f" />
 <img width="231" height="425" alt="image" src="https://github.com/user-attachments/assets/41afd4c4-467f-4104-995e-6319d8b5e13f" />
 

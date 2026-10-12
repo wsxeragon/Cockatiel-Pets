@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>玄凤鹦鹉桌宠 (Q版萌系) 动画优化审核工作台</title>
+  <style>
+    :root {
+      --bg: #f7f4ed;
+      --card-bg: #ffffff;
+      --card-border: #e6dfd5;
+      --text-main: #2e2621;
+      --text-sub: #786f67;
+      --accent: #ff8c42;
+      --accent-green: #2a9d8f;
+      --accent-red: #e76f51;
+      --orig-badge: #8d99ae;
+      --new-badge: #2a9d8f;
+    }
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+      background: var(--bg);
+      color: var(--text-main);
+      padding: 24px;
+      line-height: 1.5;
+    }
+    .header {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 20px 28px;
+      margin-bottom: 24px;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.03);
+    }
+    .header h1 {
+      font-size: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+    .header p {
+      color: var(--text-sub);
+      font-size: 14px;
+    }
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 18px;
+      margin-top: 16px;
+      padding-top: 14px;
+      border-top: 1px dashed var(--card-border);
+      font-size: 14px;
+    }
+    .toolbar label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      cursor: pointer;
+      font-weight: 500;
+    }
+    .toolbar select, .toolbar button {
+      padding: 5px 12px;
+      border-radius: 6px;
+      border: 1px solid var(--card-border);
+      background: #faf8f5;
+      font-size: 13px;
+      cursor: pointer;
+    }
+    .toolbar button:hover {
+      background: #f0ebe2;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(480px, 1fr));
+      gap: 20px;
+    }
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      padding: 18px 20px;
+      box-shadow: 0 3px 10px rgba(0,0,0,0.02);
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+    .card-title {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 16px;
+      font-weight: 600;
+    }
+    .tag {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: 12px;
+      background: #f0ebe2;
+      color: var(--text-sub);
+    }
+    .tag.highlight {
+      background: #e8f5e9;
+      color: #2e7d32;
+    }
+    .compare-stage {
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      justify-content: space-around;
+      background: #faf8f5;
+      padding: 16px 12px;
+      border-radius: 10px;
+      border: 1px solid #eee8e0;
+    }
+    .stage-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 8px;
+    }
+    .stage-badge {
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 6px;
+      color: white;
+    }
+    .stage-badge.orig {
+      background: var(--orig-badge);
+    }
+    .stage-badge.new {
+      background: var(--new-badge);
+    }
+    .viewport {
+      width: 150px;
+      height: 120px;
+      background-color: #f1ede6;
+      background-image: 
+        linear-gradient(45deg, #e7e2d9 25%, transparent 25%),
+        linear-gradient(-45deg, #e7e2d9 25%, transparent 25%),
+        linear-gradient(45deg, transparent 75%, #e7e2d9 75%),
+        linear-gradient(-45deg, transparent 75%, #e7e2d9 75%);
+      background-size: 16px 16px;
+      background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+      border-radius: 8px;
+      border: 1px solid #ddd6cc;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      transition: all 0.2s;
+    }
+    .viewport.bg-dark {
+      background: #2b2d42;
+      border-color: #1f2030;
+    }
+    .viewport.bg-white {
+      background: #ffffff;
+      border-color: #e0e0e0;
+    }
+    .viewport img {
+      width: 100px;
+      height: 80px;
+      transform-origin: center center;
+      transform: scale(var(--scale, 1.4));
+      image-rendering: pixelated;
+      image-rendering: crisp-edges;
+      user-select: none;
+      -webkit-user-drag: none;
+    }
+    .flipped img {
+      transform: scale(var(--scale, 1.4)) scaleX(-1);
+    }
+    .arrow-divider {
+      font-size: 22px;
+      color: var(--accent-red);
+      font-weight: bold;
+    }
+    .desc-box {
+      font-size: 13px;
+      color: var(--text-sub);
+      background: #fdfcfa;
+      border: 1px dashed #e8e2d8;
+      border-radius: 8px;
+      padding: 10px 12px;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .desc-line {
+      display: flex;
+      gap: 6px;
+    }
+    .desc-line strong {
+      min-width: 65px;
+      color: var(--text-main);
+    }
+    .desc-line.new-line strong {
+      color: var(--accent-green);
+    }
+    .frame-indicator {
+      font-size: 11px;
+      color: #999;
+      margin-top: -2px;
+      font-family: monospace;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="header">
+    <h1>🐤 玄凤鹦鹉萌系 Q 版 (100x80) 动画优化审核工作台</h1>
+    <p>坚持原汁原味的可爱团子造型不变，通过像素微位移与生物习性注入灵魂细节。左侧为【原版】，右侧为【优化版】，正在实时同步帧循环播放。</p>
+    
+    <div class="toolbar">
+      <label>
+        显示倍率：
+        <select id="scaleSelect">
+          <option value="1">1.0x (原始像素 100x80)</option>
+          <option value="1.3" selected>1.3x (适中观摩)</option>
+          <option value="1.8">1.8x (细节放大)</option>
+          <option value="2.2">2.2x (特大细节)</option>
+        </select>
+      </label>
+
+      <label>
+        播放速度：
+        <select id="speedSelect">
+          <option value="0.5">0.5x (慢放审帧)</option>
+          <option value="1" selected>1.0x (正常自然速度)</option>
+          <option value="1.5">1.5x (快节奏)</option>
+        </select>
+      </label>
+
+      <label>
+        朝向：
+        <select id="flipSelect">
+          <option value="normal" selected>向左 (默认)</option>
+          <option value="flipped">向右 (镜像翻转)</option>
+        </select>
+      </label>
+
+      <label>
+        底板背景：
+        <select id="bgSelect">
+          <option value="checker" selected>透明棋盘底</option>
+          <option value="white">纯白底</option>
+          <option value="dark">深灰夜间底</option>
+        </select>
+      </label>
+
+      <span style="flex: 1"></span>
+      <span style="font-size: 12px; color: #888;">素材路径：<code>D:\pets\2d-new\sprites</code></span>
+    </div>
+  </div>
+
+  <div class="grid" id="animationGrid">
+    <!-- Cards will be populated by JS -->
+  </div>
+
+  <script>
+    // Behavior configuration
+    const BEHAVIORS = [
+      {
+        id: "waddle",
+        name: "外八字鸭子步踱步 (Waddle)",
+        badge: "重点升级: 重心微摇",
+        highlight: true,
+        frames: ["waddle_0", "waddle_1", "waddle_2", "waddle_3"],
+        interval: 220,
+        descOrig: "原版双脚虽然在交替迈步，但身体水平完全静止，略显呆板平移。",
+        descNew: "优化版增加重心左右微微侧倾外八字晃动（+1像素摇摆）与小短尾逆向甩动，憨态可掬。"
+      },
+      {
+        id: "bow",
+        name: "低头求摸毛 (Bow)",
+        badge: "重点升级: 眯眼微笑",
+        highlight: true,
+        frames: ["bow_0", "bow_1", "bow_0"],
+        interval: 320,
+        descOrig: "原版仅头部下沉闭眼直线，表情无情绪起伏。",
+        descNew: "优化版增加惬意享受的弧形眯眼笑 (^_^) 与红脸蛋微微发亮，充满向主人撒娇的安全感。"
+      },
+      {
+        id: "fly",
+        name: "空中飞行与惊飞 (Fly)",
+        badge: "重点升级: 收爪破风",
+        highlight: true,
+        frames: ["fly_0", "fly_1", "fly_2", "fly_1"],
+        interval: 140,
+        descOrig: "原版飞行时两只脚掌向下垂伸直，像掉线风筝。",
+        descNew: "优化版鸟爪紧紧贴进毛茸茸圆肚皮（空气动力学流线收脚），两翅舒展更有张力。"
+      },
+      {
+        id: "sleep",
+        name: "安静睡觉 (Sleep)",
+        badge: "重点升级: 农民揣母鸡蹲",
+        highlight: true,
+        frames: ["sleep_0", "sleep_1", "sleep_0", "sleep_1"],
+        interval: 800,
+        descOrig: "原版露出两只小脚在下方，没有鸟类入睡的包容感。",
+        descNew: "优化版双脚完全缩进肚皮羽毛下（经典“农民揣/母鸡蹲”），呼吸伴随身体微弱起伏。"
+      },
+      {
+        id: "sing",
+        name: "吹口哨唱歌 (Sing)",
+        badge: "重点升级: 经典心形翅",
+        highlight: true,
+        frames: ["sing_0", "sing_1", "sing_2", "sing_1"],
+        interval: 220,
+        descOrig: "原版普通展翅与张嘴，缺乏玄凤标志性求偶自嗨动作。",
+        descNew: "优化版融合玄凤招牌“心形翅膀 (Heart Wings)”低垂半张姿态与翘尾，嘴壳一张一合大声合奏。"
+      },
+      {
+        id: "peck",
+        name: "啄地探索 (Peck)",
+        badge: "重点升级: 顿挫敲击感",
+        highlight: true,
+        frames: ["peck_0", "peck_1", "peck_0"],
+        interval: 200,
+        descOrig: "原版嘴尖匀速下倾后抬起，缺乏实体敲击的顿挫力量感。",
+        descNew: "优化版啄地接触瞬间鸟头前突+小尾巴受冲击自然微微反弹上翘，打击感更清脆。"
+      },
+      {
+        id: "hop",
+        name: "雀跃原地小跳 (Hop)",
+        badge: "活力小雀跃",
+        frames: ["hop_0", "hop_1", "hop_0"],
+        interval: 180,
+        descOrig: "离地腾空时四平八稳。",
+        descNew: "腾空时双爪微缩，落地时有柔软微蹲吸收冲力的Q弹感。"
+      },
+      {
+        id: "bob",
+        name: "点头打节拍狂魔 (Bob)",
+        badge: "打节拍",
+        frames: ["bob_0", "bob_1", "bob_0", "bob_1"],
+        interval: 160,
+        descOrig: "原版常规上下点头。",
+        descNew: "呆毛在点头底部微微受到惯性下压并迅速回弹，节奏更带感。"
+      },
+      {
+        id: "fluff",
+        name: "蓬成大毛球 (Fluff)",
+        badge: "解压毛团",
+        frames: ["fluff_0", "fluff_1", "fluff_0"],
+        interval: 280,
+        descOrig: "原版毛球体积扩展较小。",
+        descNew: "优化版胸腹羽毛向外炸开一圈，圆滚滚像个雪球大福，极度解压。"
+      },
+      {
+        id: "preen",
+        name: "整理羽毛 (Preen)",
+        badge: "理毛",
+        frames: ["preen_0", "preen_1", "preen_0", "preen_1"],
+        interval: 280,
+        descOrig: "侧头轻理翅膀。",
+        descNew: "嘴尖梳理羽毛时带动单侧翅羽微张，体现羽毛层叠感。"
+      },
+      {
+        id: "idle",
+        name: "待机眨眼 (Idle Blink)",
+        badge: "日常待机",
+        frames: ["idle_0", "idle_1", "idle_0", "idle_2"],
+        interval: 400,
+        descOrig: "原版平缓闭眼眨动。",
+        descNew: "微调呆毛微风轻拂与自然眨眼双重节奏。"
+      },
+      {
+        id: "chew",
+        name: "啃咬屏幕破坏 (Chew)",
+        badge: "淘气拆家",
+        frames: ["chew_0", "chew_1"],
+        interval: 200,
+        descOrig: "原版大嘴咬住屏幕边缘。",
+        descNew: "加重咬紧时的身体前倾与咬合顿挫，拆家干劲十足。"
+      }
+    ];
+
+    let currentScale = 1.3;
+    let currentSpeed = 1.0;
+    let isFlipped = false;
+
+    const grid = document.getElementById("animationGrid");
+
+    function renderCards() {
+      grid.innerHTML = "";
+      BEHAVIORS.forEach(b => {
+        const card = document.createElement("div");
+        card.className = "card";
+        card.innerHTML = `
+          <div class="card-title">
+            <span>${b.name}</span>
+            <span class="tag ${b.highlight ? 'highlight' : ''}">${b.badge}</span>
+          </div>
+          <div class="compare-stage">
+            <div class="stage-item">
+              <span class="stage-badge orig">原版 (Original)</span>
+              <div class="viewport ${isFlipped ? 'flipped' : ''}" id="vp-orig-${b.id}">
+                <img id="img-orig-${b.id}" src="./sprites_original/${b.frames[0]}.png" alt="orig">
+              </div>
+              <span class="frame-indicator" id="ind-orig-${b.id}">${b.frames[0]}.png</span>
+            </div>
+            
+            <div class="arrow-divider">➜</div>
+
+            <div class="stage-item">
+              <span class="stage-badge new">优化版 (Optimized)</span>
+              <div class="viewport ${isFlipped ? 'flipped' : ''}" id="vp-new-${b.id}">
+                <img id="img-new-${b.id}" src="./sprites/${b.frames[0]}.png" alt="new">
+              </div>
+              <span class="frame-indicator" id="ind-new-${b.id}">${b.frames[0]}.png</span>
+            </div>
+          </div>
+          <div class="desc-box">
+            <div class="desc-line"><strong>【原版】</strong><span>${b.descOrig}</span></div>
+            <div class="desc-line new-line"><strong>【优化】</strong><span>${b.descNew}</span></div>
+          </div>
+        `;
+        grid.appendChild(card);
+      });
+      applyScale();
+      startAnimLoops();
+    }
+
+    const intervals = [];
+    function startAnimLoops() {
+      intervals.forEach(clearInterval);
+      intervals.length = 0;
+
+      BEHAVIORS.forEach(b => {
+        let frameIdx = 0;
+        const total = b.frames.length;
+        const delay = Math.max(50, Math.round(b.interval / currentSpeed));
+
+        const timer = setInterval(() => {
+          frameIdx = (frameIdx + 1) % total;
+          const frameName = b.frames[frameIdx];
+
+          const imgOrig = document.getElementById(`img-orig-${b.id}`);
+          const indOrig = document.getElementById(`ind-orig-${b.id}`);
+          if (imgOrig) {
+            imgOrig.src = `./sprites_original/${frameName}.png`;
+            indOrig.innerText = `${frameName}.png [${frameIdx+1}/${total}]`;
+          }
+
+          const imgNew = document.getElementById(`img-new-${b.id}`);
+          const indNew = document.getElementById(`ind-new-${b.id}`);
+          if (imgNew) {
+            imgNew.src = `./sprites/${frameName}.png`;
+            indNew.innerText = `${frameName}.png [${frameIdx+1}/${total}]`;
+          }
+        }, delay);
+
+        intervals.push(timer);
+      });
+    }
+
+    function applyScale() {
+      document.querySelectorAll(".viewport img").forEach(img => {
+        img.style.setProperty("--scale", currentScale);
+      });
+    }
+
+    // Control listeners
+    document.getElementById("scaleSelect").addEventListener("change", (e) => {
+      currentScale = parseFloat(e.target.value);
+      applyScale();
+    });
+
+    document.getElementById("speedSelect").addEventListener("change", (e) => {
+      currentSpeed = parseFloat(e.target.value);
+      startAnimLoops();
+    });
+
+    document.getElementById("flipSelect").addEventListener("change", (e) => {
+      isFlipped = e.target.value === "flipped";
+      document.querySelectorAll(".viewport").forEach(vp => {
+        if (isFlipped) vp.classList.add("flipped");
+        else vp.classList.remove("flipped");
+      });
+    });
+
+    document.getElementById("bgSelect").addEventListener("change", (e) => {
+      const val = e.target.value;
+      document.querySelectorAll(".viewport").forEach(vp => {
+        vp.classList.remove("bg-white", "bg-dark");
+        if (val === "white") vp.classList.add("bg-white");
+        else if (val === "dark") vp.classList.add("bg-dark");
+      });
+    });
+
+    renderCards();
+  </script>
+</body>
+</html>

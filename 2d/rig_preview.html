@@ -1,0 +1,404 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>🐤 玄凤鹦鹉 2D 独立部件与骨骼动力学实时调试器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: #f3ece4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+    color: #333;
+    display: flex; gap: 24px;
+    min-height: 100vh;
+  }
+  .stage-pane {
+    flex: 1;
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    display: flex; flex-direction: column;
+    align-items: center;
+  }
+  .stage-header {
+    width: 100%;
+    margin-bottom: 16px;
+  }
+  .stage-header h1 { margin: 0 0 6px; font-size: 22px; color: #2c2523; }
+  .stage-header p { margin: 0; font-size: 13px; color: #7a6e65; }
+  .canvas-container {
+    width: 520px; height: 580px;
+    background: radial-gradient(circle, #faf6f0 40%, #eae0d0 100%);
+    border-radius: 12px;
+    border: 2px dashed #d8ceC4;
+    display: flex; align-items: center; justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+  canvas {
+    image-rendering: pixelated;
+  }
+  .control-pane {
+    width: 440px;
+    background: #fff;
+    border-radius: 16px;
+    padding: 24px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.06);
+    overflow-y: auto;
+    max-height: 92vh;
+  }
+  h2 { margin: 0 0 14px; font-size: 16px; color: #2c2523; border-left: 4px solid #e06d53; padding-left: 8px; }
+  .section { margin-bottom: 22px; }
+  .slider-row {
+    margin-bottom: 12px;
+  }
+  .slider-label {
+    display: flex; justify-content: space-between;
+    font-size: 13px; font-weight: bold; color: #4a3f35;
+    margin-bottom: 4px;
+  }
+  .slider-label span.val { color: #d9534f; }
+  input[type="range"] {
+    width: 100%;
+    accent-color: #d9534f;
+  }
+  .btn-group {
+    display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px;
+  }
+  .btn {
+    background: #eae2d6; border: none;
+    padding: 7px 14px; border-radius: 8px;
+    font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.15s;
+    color: #4a3f35;
+  }
+  .btn:hover { background: #dcd2c4; }
+  .btn.active { background: #d9534f; color: #fff; }
+  .layers-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 8px;
+  }
+  .layer-item {
+    background: #fbf8f4; border: 1px solid #ebdcd0;
+    padding: 6px 10px; border-radius: 6px;
+    display: flex; align-items: center; gap: 8px;
+    font-size: 12px;
+  }
+</style>
+</head>
+<body>
+
+<div class="stage-pane">
+  <div class="stage-header">
+    <h1>🐤 玄凤鹦鹉 2D 独立分层骨骼动力学实时调试器</h1>
+    <p>头冠、头、嘴、身躯、翅膀、脚、尾巴 7 大部件独立受控 | 实时层级变换与矩阵演算</p>
+  </div>
+  <div class="canvas-container">
+    <canvas id="cv" width="472" height="555"></canvas>
+  </div>
+</div>
+
+<div class="control-pane">
+  <h2>🌟 快捷情绪与行为预设 (一键触发)</h2>
+  <div class="btn-group">
+    <button class="btn" onclick="setPreset('idle')">日常呼吸发呆</button>
+    <button class="btn" onclick="setPreset('alert')">警觉冠羽炸立</button>
+    <button class="btn" onclick="setPreset('happy_wing')">欢快展翅扑腾</button>
+    <button class="btn" onclick="setPreset('head_bow')">低头求撸毛</button>
+    <button class="btn" onclick="setPreset('waddle')">小碎步溜达</button>
+    <button class="btn" onclick="setPreset('bob')">点头打节拍</button>
+    <button class="btn" onclick="stopAnimation()">⏹ 暂停动画</button>
+  </div>
+
+  <h2>🎮 独立部件角度与位移微调</h2>
+  <div class="section">
+    <div class="slider-row">
+      <div class="slider-label"><span>头冠/呆毛角度 (Crest)</span><span class="val" id="v-crest">0°</span></div>
+      <input type="range" id="s-crest" min="-45" max="45" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>头部俯仰点头 (Head)</span><span class="val" id="v-head">0°</span></div>
+      <input type="range" id="s-head" min="-30" max="35" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>嘴喙张合 (Beak Open)</span><span class="val" id="v-beak">0px</span></div>
+      <input type="range" id="s-beak" min="0" max="15" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>翅膀扑动角度 (Wing)</span><span class="val" id="v-wing">0°</span></div>
+      <input type="range" id="s-wing" min="-35" max="45" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>尾巴翘动角度 (Tail)</span><span class="val" id="v-tail">0°</span></div>
+      <input type="range" id="s-tail" min="-25" max="25" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>双脚迈步摆动 (Feet)</span><span class="val" id="v-feet">0°</span></div>
+      <input type="range" id="s-feet" min="-20" max="20" value="0" oninput="updateSliders()" />
+    </div>
+
+    <div class="slider-row">
+      <div class="slider-label"><span>躯干呼吸起伏 (Breath)</span><span class="val" id="v-body">1.00x</span></div>
+      <input type="range" id="s-body" min="96" max="104" value="100" oninput="updateSliders()" />
+    </div>
+  </div>
+
+  <h2>👁️ 表情眼睛切换</h2>
+  <div class="btn-group">
+    <button class="btn active" id="btn-eye-open" onclick="setEye('eye_open')">睁眼 (明亮灵动)</button>
+    <button class="btn" id="btn-eye-blink" onclick="setEye('eye_blink')">闭眼 (沉睡发呆)</button>
+    <button class="btn" id="btn-eye-happy" onclick="setEye('eye_happy')">眯眯眼 (惬意微笑)</button>
+  </div>
+
+  <h2>👁️ 图层可见性独立开关</h2>
+  <div class="layers-grid">
+    <label class="layer-item"><input type="checkbox" id="chk-crest" checked onchange="render()" /> 冠羽 (呆毛)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-head" checked onchange="render()" /> 头部 (含腮红)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-beak" checked onchange="render()" /> 嘴喙 (Beak)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-wing" checked onchange="render()" /> 翅膀 (Wing)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-body" checked onchange="render()" /> 身躯 (躯干)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-feet" checked onchange="render()" /> 脚部 (Feet)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-tail" checked onchange="render()" /> 尾羽 (Tail)</label>
+    <label class="layer-item"><input type="checkbox" id="chk-pivots" checked onchange="render()" /> 🔴 显示旋转轴心</label>
+  </div>
+</div>
+
+<script>
+const cv = document.getElementById("cv");
+const ctx = cv.getContext("2d");
+
+const images = {};
+const partNames = ["tail", "feet", "body", "wing", "head", "beak", "crest", "eye_open", "eye_blink", "eye_happy"];
+let loadedCount = 0;
+
+let currentEye = "eye_open";
+let animTimer = null;
+let animType = "idle";
+let animTime = 0;
+
+// Pivot points from python extraction
+const PIVOTS = {
+  crest: [135, 126],
+  head: [135, 260],
+  beak: [44, 215],
+  wing: [135, 290],
+  tail: [336, 422],
+  feet: [175, 490],
+  body: [185, 370]
+};
+
+partNames.forEach(name => {
+  const img = new Image();
+  img.src = `parts/${name}_full.png`;
+  img.onload = () => {
+    images[name] = img;
+    loadedCount++;
+    if (loadedCount === partNames.length) {
+      setPreset('idle');
+    }
+  };
+});
+
+function getVal(id) { return parseFloat(document.getElementById(id).value); }
+function isChecked(id) { return document.getElementById(id).checked; }
+
+function updateSliders() {
+  document.getElementById("v-crest").innerText = getVal("s-crest") + "°";
+  document.getElementById("v-head").innerText = getVal("s-head") + "°";
+  document.getElementById("v-beak").innerText = getVal("s-beak") + "px";
+  document.getElementById("v-wing").innerText = getVal("s-wing") + "°";
+  document.getElementById("v-tail").innerText = getVal("s-tail") + "°";
+  document.getElementById("v-feet").innerText = getVal("s-feet") + "°";
+  document.getElementById("v-body").innerText = (getVal("s-body") / 100).toFixed(2) + "x";
+  render();
+}
+
+function setEye(type) {
+  currentEye = type;
+  document.querySelectorAll("#btn-eye-open, #btn-eye-blink, #btn-eye-happy").forEach(b => b.classList.remove("active"));
+  document.getElementById(`btn-${type.replace('_', '-')}`).classList.add("active");
+  render();
+}
+
+function drawPivotCross(x, y) {
+  if (!isChecked("chk-pivots")) return;
+  ctx.save();
+  ctx.strokeStyle = "rgba(235, 40, 40, 0.9)";
+  ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x - 6, y); ctx.lineTo(x + 6, y);
+  ctx.moveTo(x, y - 6); ctx.lineTo(x, y + 6);
+  ctx.stroke();
+  ctx.fillStyle = "#fff";
+  ctx.beginPath(); ctx.arc(x, y, 2.5, 0, Math.PI * 2); ctx.fill();
+  ctx.stroke();
+  ctx.restore();
+}
+
+function render() {
+  if (loadedCount < partNames.length) return;
+  ctx.clearRect(0, 0, cv.width, cv.height);
+
+  const rad = d => d * Math.PI / 180;
+
+  const aCrest = rad(getVal("s-crest"));
+  const aHead = rad(getVal("s-head"));
+  const dBeak = getVal("s-beak");
+  const aWing = rad(getVal("s-wing"));
+  const aTail = rad(getVal("s-tail"));
+  const aFeet = rad(getVal("s-feet"));
+  const sBody = getVal("s-body") / 100;
+
+  // 1. TAIL
+  if (isChecked("chk-tail") && images["tail"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.tail[0], PIVOTS.tail[1]);
+    ctx.rotate(aTail);
+    ctx.translate(-PIVOTS.tail[0], -PIVOTS.tail[1]);
+    ctx.drawImage(images["tail"], 0, 0);
+    drawPivotCross(PIVOTS.tail[0], PIVOTS.tail[1]);
+    ctx.restore();
+  }
+
+  // 2. FEET
+  if (isChecked("chk-feet") && images["feet"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.feet[0], PIVOTS.feet[1]);
+    ctx.rotate(aFeet);
+    ctx.translate(-PIVOTS.feet[0], -PIVOTS.feet[1]);
+    ctx.drawImage(images["feet"], 0, 0);
+    drawPivotCross(PIVOTS.feet[0], PIVOTS.feet[1]);
+    ctx.restore();
+  }
+
+  // 3. BODY (躯干)
+  if (isChecked("chk-body") && images["body"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.body[0], PIVOTS.body[1]);
+    ctx.scale(1.0, sBody);
+    ctx.translate(-PIVOTS.body[0], -PIVOTS.body[1]);
+    ctx.drawImage(images["body"], 0, 0);
+    drawPivotCross(PIVOTS.body[0], PIVOTS.body[1]);
+    ctx.restore();
+  }
+
+  // 4. WING (翅膀)
+  if (isChecked("chk-wing") && images["wing"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.wing[0], PIVOTS.wing[1]);
+    ctx.rotate(aWing);
+    ctx.translate(-PIVOTS.wing[0], -PIVOTS.wing[1]);
+    ctx.drawImage(images["wing"], 0, 0);
+    drawPivotCross(PIVOTS.wing[0], PIVOTS.wing[1]);
+    ctx.restore();
+  }
+
+  // 5. HEAD + CREST + BEAK + EYE (Hierarchical Transform on Neck Pivot)
+  ctx.save();
+  ctx.translate(PIVOTS.head[0], PIVOTS.head[1]);
+  ctx.rotate(aHead);
+  ctx.translate(-PIVOTS.head[0], -PIVOTS.head[1]);
+
+  // Head Base
+  if (isChecked("chk-head") && images["head"]) {
+    ctx.drawImage(images["head"], 0, 0);
+  }
+  // Eye
+  if (images[currentEye]) {
+    ctx.drawImage(images[currentEye], 0, 0);
+  }
+
+  // Beak (Slides down/rotates when opening)
+  if (isChecked("chk-beak") && images["beak"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.beak[0], PIVOTS.beak[1]);
+    ctx.translate(-dBeak * 0.3, dBeak * 0.8);
+    ctx.translate(-PIVOTS.beak[0], -PIVOTS.beak[1]);
+    ctx.drawImage(images["beak"], 0, 0);
+    drawPivotCross(PIVOTS.beak[0], PIVOTS.beak[1]);
+    ctx.restore();
+  }
+
+  // Crest (Rotates on Skull Root Pivot)
+  if (isChecked("chk-crest") && images["crest"]) {
+    ctx.save();
+    ctx.translate(PIVOTS.crest[0], PIVOTS.crest[1]);
+    ctx.rotate(aCrest);
+    ctx.translate(-PIVOTS.crest[0], -PIVOTS.crest[1]);
+    ctx.drawImage(images["crest"], 0, 0);
+    drawPivotCross(PIVOTS.crest[0], PIVOTS.crest[1]);
+    ctx.restore();
+  }
+
+  drawPivotCross(PIVOTS.head[0], PIVOTS.head[1]);
+  ctx.restore();
+}
+
+function setPreset(type) {
+  stopAnimation();
+  animType = type;
+  animTime = 0;
+  
+  if (type === 'alert') {
+    document.getElementById("s-crest").value = 28;
+    document.getElementById("s-head").value = -12;
+    document.getElementById("s-wing").value = 0;
+    document.getElementById("s-body").value = 104;
+    setEye('eye_open');
+    updateSliders();
+  } else if (type === 'head_bow') {
+    document.getElementById("s-crest").value = -18;
+    document.getElementById("s-head").value = 24;
+    document.getElementById("s-wing").value = 0;
+    setEye('eye_happy');
+    updateSliders();
+  }
+
+  animTimer = setInterval(() => {
+    animTime += 0.05;
+    if (animType === 'idle') {
+      // Gentle breathing & subtle crest fluttering
+      document.getElementById("s-crest").value = Math.sin(animTime * 2.5) * 4;
+      document.getElementById("s-head").value = Math.sin(animTime * 1.8) * 2;
+      document.getElementById("s-body").value = 100 + Math.sin(animTime * 2.5) * 2;
+      document.getElementById("s-tail").value = Math.sin(animTime * 1.5) * 3;
+      // Periodic blink
+      if (Math.sin(animTime * 1.2) > 0.92) setEye('eye_blink');
+      else setEye('eye_open');
+    } else if (animType === 'happy_wing') {
+      // Flapping wings happily & hopping
+      document.getElementById("s-wing").value = Math.sin(animTime * 14) * 28;
+      document.getElementById("s-crest").value = 15 + Math.sin(animTime * 8) * 8;
+      document.getElementById("s-head").value = Math.sin(animTime * 7) * 6;
+      document.getElementById("s-tail").value = Math.sin(animTime * 10) * 12;
+      setEye('eye_happy');
+    } else if (animType === 'waddle') {
+      // Alternating steps & body waddle
+      document.getElementById("s-feet").value = Math.sin(animTime * 8) * 14;
+      document.getElementById("s-body").value = 100 + Math.abs(Math.sin(animTime * 8)) * 3;
+      document.getElementById("s-head").value = Math.sin(animTime * 8) * 5;
+      document.getElementById("s-tail").value = -Math.sin(animTime * 8) * 8;
+    } else if (animType === 'bob') {
+      // Rapid rhythmic nodding
+      document.getElementById("s-head").value = Math.sin(animTime * 12) * 16;
+      document.getElementById("s-crest").value = 10 + Math.sin(animTime * 12) * 10;
+      document.getElementById("s-tail").value = Math.sin(animTime * 12) * 6;
+      setEye('eye_open');
+    }
+    updateSliders();
+  }, 35);
+}
+
+function stopAnimation() {
+  if (animTimer) clearInterval(animTimer);
+  animTimer = null;
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,158 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>🐤 玄凤鹦鹉 官方多姿态动态预览器</title>
+<style>
+  body {
+    margin: 0;
+    padding: 24px;
+    background: #f4ede4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+    color: #333;
+  }
+  h1 { margin: 0 0 8px; color: #2c2523; font-size: 24px; }
+  p.subtitle { margin: 0 0 24px; color: #7a6e65; font-size: 14px; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 16px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.05);
+    text-align: center;
+    border: 1px solid #e8ded4;
+    transition: transform 0.2s;
+  }
+  .card:hover { transform: translateY(-3px); }
+  .card-title {
+    font-weight: bold;
+    font-size: 15px;
+    margin-bottom: 8px;
+    color: #4a3f35;
+  }
+  .tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    margin-bottom: 10px;
+  }
+  .tag-official { background: #fae4df; color: #b8402c; }
+  .tag-dynamic { background: #e0eef8; color: #2c6eb8; }
+  .preview-box {
+    width: 200px;
+    height: 190px;
+    margin: 0 auto;
+    position: relative;
+    background: radial-gradient(circle, #faf6f0 40%, #ede3d5 100%);
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .preview-box img {
+    max-width: 100%;
+    max-height: 100%;
+  }
+  .controls {
+    margin-bottom: 20px;
+    background: #fff;
+    padding: 12px 18px;
+    border-radius: 8px;
+    display: inline-block;
+  }
+  .btn {
+    background: #e8ded4;
+    border: none;
+    padding: 6px 14px;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 13px;
+    margin-right: 8px;
+  }
+  .btn:hover { background: #d8ceC4; }
+  .flipped img { transform: scaleX(-1); }
+</style>
+</head>
+<body>
+  <h1>🐤 原始灰玄凤鹦鹉 官方多姿态动态预览器</h1>
+  <p class="subtitle">已完全融合 8 组官方像素原画姿态 | 路径：<code>D:\pets\2d\sprites\</code></p>
+
+  <div class="controls">
+    <button class="btn" onclick="toggleFlip()">🔄 水平镜像翻转 (测试左右走动)</button>
+    <button class="btn" onclick="toggleSpeed(1)">1x 正常播放</button>
+    <button class="btn" onclick="toggleSpeed(0.5)">0.5x 慢动作</button>
+  </div>
+
+  <div class="grid" id="grid"></div>
+
+<script>
+const data = [
+  { title: "发呆眨眼 (Idle/Sleep)", frames: ["idle_0", "idle_1"], interval: 450, tag: "官方闭目睡觉" },
+  { title: "摇晃溜达 (Waddle)", frames: ["waddle_0", "waddle_1"], interval: 200, tag: "迈步巡逻" },
+  { title: "啄地取食 (Peck/Eat)", frames: ["peck_0", "peck_1"], interval: 220, tag: "官方啄地取食" },
+  { title: "拆家啃咬 (Chew)", frames: ["chew_0", "chew_1"], interval: 160, tag: "碎屑飞扬" },
+  { title: "毛发蓬松 (Fluffy Borb)", frames: ["fluff_0", "fluff_1"], interval: 350, tag: "官方毛发蓬松" },
+  { title: "整理羽毛 (Preen)", frames: ["preen_0", "preen_1"], interval: 300, tag: "官方整理羽毛" },
+  { title: "低头求摸 (Head Bow)", frames: ["bow_0", "bow_1"], interval: 320, tag: "官方低头求摸" },
+  { title: "雀跃小跳 (Hop)", frames: ["hop_0", "hop_1"], interval: 180, tag: "腾空小跳" },
+  { title: "打节拍点头 (Bob)", frames: ["bob_0", "bob_1"], interval: 160, tag: "剧烈点头" },
+  { title: "心形翅膀 (Heart Wings)", frames: ["heart_wings_0", "heart_wings_1"], interval: 240, tag: "求偶自嗨" },
+  { title: "独唱唱歌 (Sing)", frames: ["sing_0", "sing_1"], interval: 220, tag: "飞舞音符" },
+  { title: "警觉拉长 (Alert)", frames: ["alert_0"], interval: 1000, tag: "官方警觉姿态" },
+  { title: "闪电反咬 (Bite)", frames: ["bite_0"], interval: 1000, tag: "前冲反咬" },
+  { title: "张嘴哈气 (Hiss)", frames: ["hiss_0"], interval: 1000, tag: "官方张嘴哈气" },
+  { title: "展翅飞行 (Fly)", frames: ["fly_0", "fly_1"], interval: 140, tag: "官方展翅飞行" },
+];
+
+let speedMultiplier = 1.0;
+let isFlipped = false;
+
+function buildUI() {
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  data.forEach((item, idx) => {
+    const isOff = item.tag.includes("官方");
+    const card = document.createElement("div");
+    card.className = "card" + (isFlipped ? " flipped" : "");
+    card.innerHTML = `
+      <div class="card-title">${item.title}</div>
+      <div class="tag ${isOff ? 'tag-official' : 'tag-dynamic'}">${item.tag}</div>
+      <div class="preview-box">
+        <img id="img-${idx}" src="sprites/${item.frames[0]}.png" />
+      </div>
+    `;
+    grid.appendChild(card);
+
+    if (item.frames.length > 1) {
+      let cur = 0;
+      setInterval(() => {
+        cur = (cur + 1) % item.frames.length;
+        const imgEl = document.getElementById(`img-${idx}`);
+        if (imgEl) imgEl.src = `sprites/${item.frames[cur]}.png`;
+      }, item.interval / speedMultiplier);
+    }
+  });
+}
+
+function toggleFlip() {
+  isFlipped = !isFlipped;
+  document.querySelectorAll('.card').forEach(el => {
+    el.classList.toggle('flipped', isFlipped);
+  });
+}
+
+function toggleSpeed(s) {
+  speedMultiplier = s;
+  buildUI();
+}
+
+buildUI();
+</script>
+</body>
+</html>

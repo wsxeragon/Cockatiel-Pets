@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>🐤 玄凤鹦鹉 官方正统逐帧像素动画播放器</title>
+<style>
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 24px;
+    background: #f4ede4;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Microsoft YaHei", sans-serif;
+    color: #333;
+  }
+  header { margin-bottom: 20px; }
+  h1 { margin: 0 0 6px; font-size: 24px; color: #2c2523; }
+  p.sub { margin: 0; font-size: 14px; color: #7a6e65; }
+  .bar {
+    margin: 18px 0; background: #fff;
+    padding: 12px 18px; border-radius: 10px;
+    display: inline-flex; gap: 12px; align-items: center;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+  }
+  .btn {
+    background: #eae2d6; border: none;
+    padding: 7px 14px; border-radius: 6px;
+    cursor: pointer; font-size: 13px; font-weight: 500;
+  }
+  .btn:hover { background: #ded2c4; }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+  }
+  .card {
+    background: #fff; border-radius: 12px;
+    padding: 14px; text-align: center;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.04);
+    border: 1px solid #ebdcd0;
+  }
+  .card-title { font-weight: bold; font-size: 15px; margin-bottom: 4px; color: #433935; }
+  .card-meta { font-size: 12px; color: #a08a7e; margin-bottom: 8px; }
+  .stage {
+    width: 220px; height: 190px;
+    margin: 0 auto;
+    background: radial-gradient(circle, #fcf9f5 50%, #eee3d5 100%);
+    border-radius: 8px;
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden; position: relative;
+  }
+  .stage img {
+    max-width: 95%; max-height: 95%;
+    image-rendering: pixelated;
+    transition: transform 0.1s;
+  }
+  .flipped img { transform: scaleX(-1); }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>🐤 原始灰玄凤鹦鹉 官方正统逐帧像素动画播放器</h1>
+  <p class="sub">100% 原版整帧光栅像素架构 | 零旋转撕裂 | 纯正手绘关键姿态 | 路径: <code>D:\pets\assets\sprites\</code></p>
+  
+  <div class="bar">
+    <button class="btn" onclick="toggleFlip()">🔄 切换水平朝向 (测试左右方向)</button>
+    <button class="btn" onclick="setSpeed(1)">1.0x 正常速度</button>
+    <button class="btn" onclick="setSpeed(0.5)">0.5x 慢放看细节</button>
+    <button class="btn" onclick="setSpeed(1.5)">1.5x 欢快加速</button>
+  </div>
+</header>
+
+<div class="grid" id="grid"></div>
+
+<script>
+const behaviors = [
+  { name: "闭眼发呆 (IDLE_BLINK)", frames: ["idle_0", "idle_1", "idle_0", "idle_0"], interval: 450, note: "睁眼发呆与自然闭眼眨动" },
+  { name: "摇晃溜达 (IDLE_WADDLE)", frames: ["waddle_0", "waddle_1", "waddle_2", "waddle_3"], interval: 180, note: "四拍交替迈步小碎步" },
+  { name: "啄啄桌面 (IDLE_PECK)", frames: ["peck_0", "peck_1"], interval: 220, note: "低头探地与尖喙点触桌面" },
+  { name: "啃咬拆家 (MISCHIEF_CHEW)", frames: ["chew_0", "chew_1"], interval: 160, note: "嘴尖咀嚼碎屑颗粒飞扬" },
+  { name: "蓬成毛球 (COMFORT_FLUFF)", frames: ["fluff_0", "fluff_1"], interval: 350, note: "全身羽毛膨胀圆球母鸡蹲" },
+  { name: "整理羽毛 (COMFORT_PREEN)", frames: ["preen_0", "preen_1"], interval: 300, note: "转头理羽清洁翅膀" },
+  { name: "低头求撸 (COMFORT_BOW)", frames: ["bow_0", "bow_1"], interval: 300, note: "头部平贴地面求主人摸摸" },
+  { name: "雀跃小跳 (EXCITE_HOP)", frames: ["hop_0", "hop_1"], interval: 180, note: "屈腿下蹲与腾空起跳" },
+  { name: "点头节拍 (EXCITE_BOB)", frames: ["bob_0", "bob_1"], interval: 160, note: "上下剧烈打节拍点头狂魔" },
+  { name: "心形翅膀 (HEART_WINGS)", frames: ["heart_wings_0", "heart_wings_1"], interval: 240, note: "欢快自嗨微张小翅膀" },
+  { name: "欢快独唱 (EXCITE_SING)", frames: ["sing_0", "sing_1", "sing_2", "sing_1"], interval: 180, note: "嘴壳一张一合节拍欢唱，飘扬蓝色音符" },
+  { name: "警觉拉长 (FRIGHT_ALERT)", frames: ["alert_0"], interval: 1000, note: "冠羽高耸身体紧绷拉直" },
+  { name: "闪电反咬 (FRIGHT_BITE)", frames: ["bite_0", "bite_1"], interval: 180, note: "前屈身躯闪电前冲咬击" },
+  { name: "张嘴哈气 (FRIGHT_HISS)", frames: ["hiss_0", "hiss_1"], interval: 200, note: "嘴壳大张一张一合哈气威慑" },
+  { name: "展翅飞行 (IDLE_FLY)", frames: ["fly_0", "fly_1", "fly_2", "fly_1"], interval: 130, note: "双翼高展->平展->下压扑击循环煽动" },
+  { name: "安详沉睡 (REST_SLEEP)", frames: ["sleep_0", "sleep_1"], interval: 650, note: "惬意闭目入睡飘出软萌 z Z" },
+  { name: "苏醒伸展 (REST_WAKE)", frames: ["wake_0", "wake_1"], interval: 300, note: "睁开双眼伸展身子" },
+];
+
+let isFlipped = false;
+let speed = 1.0;
+const timers = [];
+
+function render() {
+  timers.forEach(t => clearInterval(t));
+  timers.length = 0;
+  
+  const grid = document.getElementById("grid");
+  grid.innerHTML = "";
+  
+  behaviors.forEach((b, idx) => {
+    const card = document.createElement("div");
+    card.className = "card" + (isFlipped ? " flipped" : "");
+    card.innerHTML = `
+      <div class="card-title">${b.name}</div>
+      <div class="card-meta">${b.note}</div>
+      <div class="stage">
+        <img id="img-${idx}" src="../assets/sprites/${b.frames[0]}.png" />
+      </div>
+    `;
+    grid.appendChild(card);
+    
+    if (b.frames.length > 1) {
+      let fIdx = 0;
+      const tid = setInterval(() => {
+        fIdx = (fIdx + 1) % b.frames.length;
+        const imgEl = document.getElementById(`img-${idx}`);
+        if (imgEl) imgEl.src = `../assets/sprites/${b.frames[fIdx]}.png`;
+      }, b.interval / speed);
+      timers.push(tid);
+    }
+  });
+}
+
+function toggleFlip() {
+  isFlipped = !isFlipped;
+  document.querySelectorAll('.card').forEach(c => c.classList.toggle('flipped', isFlipped));
+}
+
+function setSpeed(s) {
+  speed = s;
+  render();
+}
+
+render();
+</script>
+</body>
+</html>

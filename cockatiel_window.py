@@ -198,7 +198,11 @@ class CockatielWindow(QWidget):
         """动画帧步进"""
         frames = self.current_behavior.frames
         if len(frames) > 1:
-            self.current_frame_index = (self.current_frame_index + 1) % len(frames)
+            if not getattr(self.current_behavior, 'is_looping', True):
+                if self.current_frame_index < len(frames) - 1:
+                    self.current_frame_index += 1
+            else:
+                self.current_frame_index = (self.current_frame_index + 1) % len(frames)
             # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
             if self.current_behavior.code == BehaviorType.EXCITE_BONK:
                 frame_name = frames[self.current_frame_index]
@@ -335,6 +339,13 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code in EXCITED_BEHAVIORS:
                 self.mood.clear_excitement()
                 self.last_feedback = f"{self.current_behavior.name_cn}结束，兴奋值自动清空！"
+
+            # 刚睡醒伸展完毕：平稳切入平静发呆站立
+            if self.current_behavior.code == BehaviorType.REST_WAKE:
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "伸展完毕，清醒站立发呆~")
+                if self.hud_window:
+                    self.hud_window.update_view()
+                return
 
             if self.mood.should_sleep(now):
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0,

@@ -45,6 +45,7 @@ class BehaviorDef:
     frames: List[str]
     frame_interval_ms: int = 250
     is_interruptible: bool = True
+    is_looping: bool = True
 
 BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     # 日常
@@ -93,7 +94,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.REST_WAKE: BehaviorDef(
         BehaviorType.REST_WAKE, "醒来伸展", 0.0, 0.0, 0.0, 0.0, 0.6, 0.0,
-        ["wake_0", "wake_1"], frame_interval_ms=300
+        ["wake_0", "wake_1"], frame_interval_ms=300, is_looping=False
     ),
     # 兴奋
     BehaviorType.EXCITE_HOP: BehaviorDef(
@@ -127,7 +128,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.FRIGHT_BITE: BehaviorDef(
         BehaviorType.FRIGHT_BITE, "咬鼠标反击", 0.0, 1.0, -0.5, 0.0, 1.0, 0.2,
-        ["bite_0", "bite_1", "bite_2", "bite_3"], frame_interval_ms=180, is_interruptible=False
+        ["bite_0", "bite_1", "bite_2", "bite_3"], frame_interval_ms=180, is_interruptible=False, is_looping=False
     ),
     BehaviorType.FRIGHT_HISS: BehaviorDef(
         BehaviorType.FRIGHT_HISS, "炸毛哈气威慑", 1.0, 1.0, -0.5, 0.0, 2.0, 0.5,

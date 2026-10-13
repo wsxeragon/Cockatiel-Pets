@@ -903,16 +903,16 @@ def render_preen_back_frame(phase=0):
     hx, hy = head_x, head_y
     d.ellipse((hx - 13, hy - 13, hx + 13, hy + 13), fill=c["ink"])
     d.ellipse((hx - 12, hy - 12, hx + 12, hy + 12), fill=c["yellow"])
+    # 颈后枕部浅白过渡羽 (在头后方，即左侧)
     d.polygon([
-        (hx - 12, hy - 6),
-        (hx - 8, hy - 11),
-        (hx - 2, hy - 3),
-        (hx - 6, hy + 8),
-        (hx - 12, hy + 4)
+        (hx - 6, hy - 9),
+        (hx - 12, hy - 5),
+        (hx - 13, hy + 9),
+        (hx - 6, hy + 12)
     ], fill=c["white"])
 
-    # 7. CHEEK
-    d.ellipse((hx + 1, hy + 1, hx + 10, hy + 10), fill=c["cheek"])
+    # 7. CHEEK (招牌大腮红 - 正确镜像至眼后耳羽位置，位于头部左侧偏下，完全避免被嘴壳遮挡)
+    d.ellipse((hx - 8, hy + 1, hx + 3, hy + 11), fill=c["cheek"])
 
     # 8. EYE (睁开大圆眼 - 专注低头注视背后羽毛，带灵动水润高光)
     if eye_mode == "blink":

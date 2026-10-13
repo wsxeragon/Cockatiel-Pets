@@ -106,7 +106,10 @@ class CockatielWindow(QWidget):
             return pix.transformed(QTransform().scale(-1, 1))
         return pix
 
-    def switch_behavior(self, new_b_def: BehaviorDef, duration: float, feedback: str = None):
+    def switch_behavior(self, new_b_def: BehaviorDef, duration: Optional[float] = None, feedback: str = None):
+        if duration is None:
+            duration = max(1.0, random.gauss(new_b_def.duration_mean, new_b_def.duration_std))
+
         # 从兴奋类行为切出时 (打断或结束)，自动清空兴奋值
         if self.current_behavior and self.current_behavior.code in EXCITED_BEHAVIORS and new_b_def.code not in EXCITED_BEHAVIORS:
             self.mood.clear_excitement()
@@ -181,13 +184,13 @@ class CockatielWindow(QWidget):
             self.waddle_direction = -1
         self.move(new_x, cur_pos.y())
         self.mood.excitement = max(self.mood.excitement, 55.0)
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2, reason)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None, reason)
     def trigger_hop(self, reason: str = "兴奋雀跃：移动连环小跳！"):
         """触发移动雀跃小跳"""
         if self.current_behavior.code == BehaviorType.REST_SLEEP:
             self.wake_up("被欢快的跳跃冲动唤醒！")
         self.mood.excitement = max(self.mood.excitement, 65.0)
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_HOP], 3.2, reason)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_HOP], None, reason)
         if self.hud_window:
             self.hud_window.update_view()
 
@@ -293,7 +296,7 @@ class CockatielWindow(QWidget):
                 # 触及屏幕左边缘：若处于兴奋或较活跃状态，高概率停下敲击屏幕边缘！
                 if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
                     self.waddle_direction = 1  # 敲击结束后调头折返
-                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2,
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None,
                                          "溜达撞到屏幕左边缘，兴奋用嘴壳敲击屏幕！")
                     if self.hud_window:
                         self.hud_window.update_view()
@@ -309,7 +312,7 @@ class CockatielWindow(QWidget):
                 # 触及屏幕右边缘：同样判定嘴壳敲击
                 if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
                     self.waddle_direction = -1  # 敲击结束后调头折返
-                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2,
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None,
                                          "溜达撞到屏幕右边缘，兴奋用嘴壳敲击屏幕！")
                     if self.hud_window:
                         self.hud_window.update_view()
@@ -394,7 +397,7 @@ class CockatielWindow(QWidget):
                 if hover_dur >= 0.6 and self.mood.fright < 25.0:
                     self.mood.hover_head_tick(0.05)
                     if self.current_behavior.code not in [BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF]:
-                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 3.0, "察觉到手停在头顶，主动低头求撸")
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], None, "察觉到手停在头顶，主动低头求撸")
         else:
             self.hover_head_start_time = None
 
@@ -436,7 +439,7 @@ class CockatielWindow(QWidget):
         d_co, _, msg = self.mood.pet_head()
         # 优先切换到低头享受或蓬毛
         chosen = BehaviorType.COMFORT_BOW if random.random() < 0.6 else BehaviorType.COMFORT_FLUFF
-        self.switch_behavior(BEHAVIOR_CATALOG[chosen], 3.5, msg)
+        self.switch_behavior(BEHAVIOR_CATALOG[chosen], None, msg)
 
     def handle_touch_body(self):
         """戳身体禁区"""
@@ -531,7 +534,7 @@ class CockatielWindow(QWidget):
             elif self.flight_purpose == "roam":
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 2.0, "飞了一小段，落地休息")
             else:
-                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 3.5, "亲切降落，在鼠标边低头求撸")
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], None, "亲切降落，在鼠标边低头求撸")
             return
 
         # 二阶贝塞尔曲线插值: B(t) = (1-t)^2 * P0 + 2t(1-t) * P1 + t^2 * P2
@@ -579,7 +582,7 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被歌声唤醒了")
             self.mood.excitement = 90.0
-            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_SING], 6.0, "被主人逗乐，开心大声独唱！")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_SING], None, "被主人逗乐，开心大声独唱！")
         elif res == act_hop:
             self.trigger_hop("右键菜单触发：欢快移动连环小跳！")
         elif res == act_bonk:
@@ -588,11 +591,11 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来连环啄米")
             self.mood.excitement = max(self.mood.excitement, 70.0)
-            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_DOUBLE_PECK], 3.2, "右键菜单触发：兴奋连环双击啄桌！")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_DOUBLE_PECK], None, "右键菜单触发：兴奋连环双击啄桌！")
         elif res == act_peck:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来啄米")
-            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], 3.6, "右键菜单触发：闲置自然啄食！")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], None, "右键菜单触发：闲置自然啄食！")
         elif res == act_fly:
             self.start_flight(panic=False, roam=True)
         elif res == act_fright:

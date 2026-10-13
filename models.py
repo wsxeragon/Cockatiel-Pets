@@ -76,8 +76,8 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["fluff_0", "fluff_1", "fluff_0"]
     ),
     BehaviorType.COMFORT_PREEN: BehaviorDef(
-        BehaviorType.COMFORT_PREEN, "整理羽毛", 8.0, -0.4, 0.6, -0.1, 120.0, 12.0,
-        ["preen_0", "preen_1", "preen_0", "preen_1"], frame_interval_ms=280
+        BehaviorType.COMFORT_PREEN, "整理羽毛(埋背理毛)", 8.0, -0.4, 0.6, -0.1, 120.0, 12.0,
+        ["preen_0", "preen_1", "preen_2", "preen_3"], frame_interval_ms=280
     ),
     BehaviorType.COMFORT_BOW: BehaviorDef(
         BehaviorType.COMFORT_BOW, "低头求撸毛", 2.0, -0.6, 1.2, 0.0, 10.0, 1.0,

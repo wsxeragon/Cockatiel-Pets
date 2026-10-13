@@ -518,6 +518,288 @@ def render_bird_flight_custom(
 
     return im
 
+def render_true_ground_peck_frame(phase=0):
+    """Render a dedicated 100x80 frame where the bird realistically pecks the ground.
+    Ground baseline is at y = 72.
+    phase:
+      0: Aim (Looking down, body starts tilting forward)
+      1: Strike (Beak touches ground y=71! Tail sticks up high!)
+      2: Rebound (Head pops up slightly, beak opens/closes chewing)
+      3: Recover (Head lifts up, tail lowers, chewing food)
+    """
+    im = Image.new("RGBA", (100, 80))
+    d = ImageDraw.Draw(im)
+    c = C
+
+    if phase == 0:
+        # Phase 0: 瞄准准备 (Look down)
+        body_tilt_y = 2
+        body_x0, body_y0, body_x1, body_y1 = 33, 34, 71, 70
+        tail_lift = -4       # 尾巴微翘
+        hx, hy = 29, 41      # 头低向地面
+        eye_look = "down"
+        crest_lean = 2
+        feet_press = 0
+        tap_spark = False
+
+    elif phase == 1:
+        # Phase 1: 触地啄击 (Strike - Beak hits ground y=71!)
+        body_tilt_y = 4
+        body_x0, body_y0, body_x1, body_y1 = 31, 36, 69, 71
+        tail_lift = -12      # 尾巴高高翘起 (超萌翘臀杠杆感)
+        hx, hy = 23, 53      # 头部深度下压
+        eye_look = "down"
+        crest_lean = 4       # 羽冠惯性前甩
+        feet_press = 1       # 脚爪吃力抓地
+        tap_spark = True     # 触地清脆微粒
+
+    elif phase == 2:
+        # Phase 2: 触地回弹 (Rebound & Nibble)
+        body_tilt_y = 3
+        body_x0, body_y0, body_x1, body_y1 = 32, 35, 70, 70
+        tail_lift = -8       # 尾巴保持微翘
+        hx, hy = 26, 46      # 受地面反作用力微弹起
+        eye_look = "happy"
+        crest_lean = 1
+        feet_press = 0
+        tap_spark = False
+
+    else:
+        # Phase 3: 抬头嚼食 (Lift & Recover)
+        body_tilt_y = 0
+        body_x0, body_y0, body_x1, body_y1 = 34, 33, 72, 69
+        tail_lift = -2       # 尾巴平稳回落
+        hx, hy = 32, 35      # 顺势抬头
+        eye_look = "happy"   # 享受吧唧嘴
+        crest_lean = 0
+        feet_press = 0
+        tap_spark = False
+
+    # 1. TAIL (尾羽 - 随身体前俯杠杆翘起)
+    tail_pts_outer = [
+        (61, 49 + body_tilt_y),
+        (96, 51 + tail_lift),
+        (98, 55 + tail_lift),
+        (68, 57 + body_tilt_y),
+        (60, 53 + body_tilt_y)
+    ]
+    d.polygon(tail_pts_outer, fill=c["ink"])
+    d.polygon([
+        (63, 50 + body_tilt_y),
+        (95, 52 + tail_lift),
+        (92, 54 + tail_lift),
+        (67, 54 + body_tilt_y)
+    ], fill=c["dark"])
+    d.line([(71, 52 + body_tilt_y), (92, 53 + tail_lift)], fill=c["light"])
+
+    # 2. FEET (双脚 - 稳固踩在地面 y=72)
+    feet = [(45, 41), (57, 54)]
+    for fx, toe in feet:
+        d.line([(fx, 65 + feet_press), (toe, 72)], fill=c["ink"], width=3)
+        d.line([(fx, 65 + feet_press), (toe, 72)], fill=c["foot"], width=2)
+        d.line([(toe - 3, 72), (toe + 2, 72)], fill=c["foot"], width=2)
+
+    # 3. BODY (圆滚滚麻薯身躯 - 前倾俯冲姿态)
+    d.ellipse((body_x0, body_y0, body_x1, body_y1), fill=c["ink"])
+    d.ellipse((body_x0 + 2, body_y0 + 2, body_x1 - 2, body_y1 - 2), fill=c["grey"])
+    d.ellipse((body_x0 + 4, body_y0 + 6, body_x0 + 22, body_y1 - 5), fill=c["light"])
+
+    # 4. WING (近侧翅膀 - 随身体前俯紧收后翘)
+    wing_pts = [
+        (47, 39 + body_tilt_y),
+        (65, 42 + body_tilt_y + tail_lift // 3),
+        (76, 52 + body_tilt_y + tail_lift // 2),
+        (63, 61 + body_tilt_y),
+        (47, 54 + body_tilt_y)
+    ]
+    d.polygon(wing_pts, fill=c["ink"])
+    d.polygon([(x + 1, y + 1) for x, y in wing_pts[:-1]], fill=c["dark"])
+    # 纯白大翅斑
+    d.polygon([
+        (49, 46 + body_tilt_y),
+        (54, 47 + body_tilt_y),
+        (62, 54 + body_tilt_y + tail_lift // 4),
+        (72, 54 + body_tilt_y + tail_lift // 3),
+        (65, 60 + body_tilt_y),
+        (56, 58 + body_tilt_y)
+    ], fill=c["white"])
+
+    # 5. NECK (伸长的下倾颈部)
+    neck_pts = [
+        (hx - 2, hy + 5),
+        (hx + 10, hy + 2),
+        (body_x0 + 16, body_y0 + 8),
+        (body_x0 + 6, body_y0 + 17),
+        (hx + 2, hy + 14)
+    ]
+    d.polygon(neck_pts, fill=c["ink"])
+    d.polygon([(x, y) for x, y in neck_pts[:-1]], fill=c["grey"])
+
+    # 6. HEAD & CHEEKS (大头俯探)
+    d.ellipse((hx - 13, hy - 13, hx + 13, hy + 13), fill=c["ink"])
+    d.ellipse((hx - 12, hy - 12, hx + 11, hy + 12), fill=c["yellow"])
+    d.polygon([(hx + 6, hy - 9), (hx + 12, hy - 5), (hx + 13, hy + 9), (hx + 6, hy + 12)], fill=c["white"])
+    # 招牌橘色大腮红
+    d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
+
+    # 7. CREST (羽冠 - 随低头重力与惯性前倾微颤)
+    crest_poly_outer = [
+        (hx - 5, hy - 10),
+        (hx - 3 - crest_lean, hy - 27),
+        (hx - crest_lean, hy - 29),
+        (hx + 3, hy - 11)
+    ]
+    crest_poly_inner = [
+        (hx - 1, hy - 11),
+        (hx + 5 - crest_lean, hy - 24),
+        (hx + 7 - crest_lean, hy - 23),
+        (hx + 4, hy - 9)
+    ]
+    d.polygon(crest_poly_outer, fill=c["shade"])
+    d.polygon(crest_poly_inner, fill=c["yellow"])
+
+    # 8. EYES (眼神视线聚焦于桌面小石子/谷粒)
+    if eye_look == "down":
+        d.ellipse((hx - 8, hy - 5, hx - 4, hy), fill=c["ink"])
+        d.point((hx - 6, hy - 2), fill=c["white"])
+    else:
+        # 眯眯笑眼 (享受吃小米)
+        d.line([(hx - 9, hy - 1), (hx - 6, hy - 4), (hx - 3, hy - 1)], fill=c["ink"], width=2)
+        d.point((hx + 2, hy + 6), fill=c["blush"])
+
+    # 9. BEAK (小鹦鹉标志性弯钩喙 - 依据啄地俯仰角真实旋转并触地)
+    def rotate_point(px, py, ox, oy, angle_deg):
+        rad = math.radians(angle_deg)
+        cos_a = math.cos(rad)
+        sin_a = math.sin(rad)
+        dx = px - ox
+        dy = py - oy
+        rx = dx * cos_a - dy * sin_a
+        ry = dx * sin_a + dy * cos_a
+        return (round(ox + rx), round(oy + ry))
+
+    if phase == 1:
+        # Phase 1: 真实触地！头部深潜 (hy=53)，弯钩上喙尖精准落在 (14, 71)
+        upper_beak_pts = [
+            (hx - 10, hy + 2),
+            (hx - 13, hy + 3),
+            (hx - 15, hy + 6),
+            (hx - 14, hy + 10),
+            (14, 71),            # 嘴尖触地！！(精确 y=71)
+            (17, 68),
+            (hx - 7, hy + 9),
+            (hx - 8, hy + 4)
+        ]
+        upper_beak_inner = [
+            (hx - 10, hy + 3),
+            (hx - 12, hy + 4),
+            (hx - 14, hy + 7),
+            (hx - 13, hy + 10),
+            (14, 70),
+            (16, 68),
+            (hx - 8, hy + 8),
+            (hx - 9, hy + 5)
+        ]
+        lower_beak = [
+            (hx - 8, hy + 8),
+            (16, 67),
+            (18, 65),
+            (hx - 6, hy + 7)
+        ]
+        d.polygon(lower_beak, fill=c["ink"])
+        d.polygon([(x, y) for x, y in lower_beak], fill=c["beak"])
+        d.polygon(upper_beak_pts, fill=c["ink"])
+        d.polygon(upper_beak_inner, fill=c["beak"])
+        d.point((15, 69), fill="#c8b8b5")
+        d.point((hx - 11, hy + 4), fill="#c8b8b5")
+
+    elif phase == 0:
+        # Phase 0: 低头瞄准 (hy=41)，喙朝斜下方 ~28°
+        ox, oy = hx - 9, hy + 2
+        rot_ang = -28
+        orig_upper = [
+            (hx - 10, hy - 2), (hx - 13, hy - 2), (hx - 15, hy),
+            (hx - 16, hy + 2), (hx - 16, hy + 4), (hx - 14, hy + 6),
+            (hx - 13, hy + 8), (hx - 13, hy + 5), (hx - 10, hy + 2)
+        ]
+        orig_inner = [
+            (hx - 11, hy - 1), (hx - 13, hy - 1), (hx - 15, hy + 1),
+            (hx - 15, hy + 4), (hx - 13, hy + 6), (hx - 13, hy + 5),
+            (hx - 10, hy + 2)
+        ]
+        upper_beak_pts = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_upper]
+        upper_beak_inner = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_inner]
+        
+        orig_lower = [(hx - 11, hy + 4), (hx - 13, hy + 6), (hx - 11, hy + 8), (hx - 9, hy + 6)]
+        orig_lower_in = [(hx - 11, hy + 5), (hx - 12, hy + 6), (hx - 10, hy + 7)]
+        lower_beak = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_lower]
+        lower_beak_in = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_lower_in]
+        
+        d.polygon(lower_beak, fill=c["ink"])
+        d.polygon(lower_beak_in, fill=c["beak"])
+        d.polygon(upper_beak_pts, fill=c["ink"])
+        d.polygon(upper_beak_inner, fill=c["beak"])
+        d.point(rotate_point(hx - 14, hy + 1, ox, oy, rot_ang), fill="#c8b8b5")
+
+    elif phase == 2:
+        # Phase 2: 触地回弹轻嚼 (hy=46)，小嘴微张、小谷粒在口
+        ox, oy = hx - 9, hy + 2
+        rot_ang = -20
+        orig_upper = [
+            (hx - 10, hy - 2), (hx - 13, hy - 2), (hx - 15, hy),
+            (hx - 16, hy + 2), (hx - 16, hy + 4), (hx - 14, hy + 6),
+            (hx - 13, hy + 8), (hx - 13, hy + 5), (hx - 10, hy + 2)
+        ]
+        orig_inner = [
+            (hx - 11, hy - 1), (hx - 13, hy - 1), (hx - 15, hy + 1),
+            (hx - 15, hy + 4), (hx - 13, hy + 6), (hx - 13, hy + 5),
+            (hx - 10, hy + 2)
+        ]
+        upper_beak_pts = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_upper]
+        upper_beak_inner = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_inner]
+        
+        orig_lower = [(hx - 11, hy + 6), (hx - 14, hy + 9), (hx - 12, hy + 11), (hx - 9, hy + 8)]
+        orig_lower_in = [(hx - 11, hy + 7), (hx - 13, hy + 9), (hx - 11, hy + 10)]
+        lower_beak = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_lower]
+        lower_beak_in = [rotate_point(x, y, ox, oy, rot_ang) for x, y in orig_lower_in]
+        
+        d.polygon(lower_beak, fill=c["ink"])
+        d.polygon(lower_beak_in, fill=c["beak"])
+        d.polygon(upper_beak_pts, fill=c["ink"])
+        d.polygon(upper_beak_inner, fill=c["beak"])
+        d.point(rotate_point(hx - 14, hy + 1, ox, oy, rot_ang), fill="#c8b8b5")
+        seed_pos = rotate_point(hx - 13, hy + 8, ox, oy, rot_ang)
+        d.point(seed_pos, fill="#ffcc00")
+        d.point((seed_pos[0] + 1, seed_pos[1]), fill="#ffa000")
+
+    else:
+        # Phase 3: 顺势抬头嚼食 (hy=35)，正常回正
+        d.polygon([(hx - 11, hy + 4), (hx - 13, hy + 6), (hx - 11, hy + 8), (hx - 9, hy + 6)], fill=c["ink"])
+        d.polygon([(hx - 11, hy + 5), (hx - 12, hy + 6), (hx - 10, hy + 7)], fill=c["beak"])
+        upper = [
+            (hx - 10, hy - 2), (hx - 13, hy - 2), (hx - 15, hy),
+            (hx - 16, hy + 2), (hx - 16, hy + 4), (hx - 14, hy + 6),
+            (hx - 13, hy + 8), (hx - 13, hy + 5), (hx - 10, hy + 2)
+        ]
+        d.polygon(upper, fill=c["ink"])
+        d.polygon([
+            (hx - 11, hy - 1), (hx - 13, hy - 1), (hx - 15, hy + 1),
+            (hx - 15, hy + 4), (hx - 13, hy + 6), (hx - 13, hy + 5),
+            (hx - 10, hy + 2)
+        ], fill=c["beak"])
+        d.point((hx - 14, hy + 1), fill="#c8b8b5")
+        d.point((hx - 15, hy + 6), fill="#ffcc00")
+
+    # 10. GROUND IMPACT TAP PARTICLES (触地瞬间清脆微星斑)
+    if tap_spark:
+        d.point((11, 70), fill="#ffd100")
+        d.point((10, 69), fill="#ffffff")
+        d.point((17, 71), fill="#ffd100")
+        d.point((18, 70), fill="#ff9800")
+        d.point((14, 69), fill="#fff3a8")
+
+    return im
+
 def generate_optimized_suite():
     # 1. 走动 (Waddle) - 注入外八字左右重心摇摆与尾巴反向微颤！
     frames = {
@@ -532,9 +814,11 @@ def generate_optimized_suite():
         "waddle_2": bird_q_optimized(),
         "waddle_3": bird_q_optimized(step=2, head=(1, 1), body_roll=1, tail_wag=-2),   # 向右摇摆迈步
         
-        # 啄地与拆家 (带打击回弹与喷溅碎屑)
-        "peck_0": bird_q_optimized(head=(-3, 4)),
-        "peck_1": bird_q_optimized(head=(-6, 12), tail_wag=2), # 触地顿挫尾巴弹起
+        # 真实触地啄桌面与嚼食 (深潜触地 y=71、翘臀杠杆、反冲咀嚼)
+        "peck_0": render_true_ground_peck_frame(phase=0), # 瞄准准备
+        "peck_1": render_true_ground_peck_frame(phase=1), # 真实触地击打 (y=71)
+        "peck_2": render_true_ground_peck_frame(phase=2), # 触地回弹轻嚼
+        "peck_3": render_true_ground_peck_frame(phase=3), # 抬头嚼食复位
         "chew_0": bird_q_optimized(head=(-3, 3)),
         "chew_1": bird_q_optimized(head=(-5, 4), mouth="bite", crumbs=True),
         
@@ -597,10 +881,14 @@ def generate_optimized_suite():
     for name, img in frames.items():
         img.save(OUT_NEW / f"{name}.png")
 
-    # Sync bite & fly frames to main assets/sprites directory
+    # Sync bite, fly & true ground peck frames to main assets/sprites directory
     assets_sprites = Path(r"D:\pets\assets\sprites")
     if assets_sprites.exists():
-        for b_name in ["bite_0", "bite_1", "bite_2", "bite_3", "fly_0", "fly_1", "fly_2", "fly_3"]:
+        for b_name in [
+            "bite_0", "bite_1", "bite_2", "bite_3",
+            "fly_0", "fly_1", "fly_2", "fly_3",
+            "peck_0", "peck_1", "peck_2", "peck_3"
+        ]:
             if b_name in frames:
                 frames[b_name].save(assets_sprites / f"{b_name}.png")
                 print(f"Synced {b_name}.png to {assets_sprites}")

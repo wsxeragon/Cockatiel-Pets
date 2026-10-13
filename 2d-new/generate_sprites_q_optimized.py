@@ -816,7 +816,7 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 48, 38
         beak_reach = 0
         wing_ruffle = 0
-        eye_mode = "cozy"
+        eye_mode = "open"
         crest_wag = 0
         feather_particle = False
         body_breath = 0
@@ -825,7 +825,7 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 50, 40
         beak_reach = 2
         wing_ruffle = 2
-        eye_mode = "happy"
+        eye_mode = "open"
         crest_wag = 1
         feather_particle = False
         body_breath = 1
@@ -834,7 +834,7 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 49, 39
         beak_reach = 1
         wing_ruffle = 3
-        eye_mode = "happy"
+        eye_mode = "open"
         crest_wag = 2
         feather_particle = True
         body_breath = 1
@@ -843,7 +843,7 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 47, 37
         beak_reach = 0
         wing_ruffle = 1
-        eye_mode = "cozy"
+        eye_mode = "open"
         crest_wag = 0
         feather_particle = False
         body_breath = 0
@@ -914,12 +914,15 @@ def render_preen_back_frame(phase=0):
     # 7. CHEEK
     d.ellipse((hx + 1, hy + 1, hx + 10, hy + 10), fill=c["cheek"])
 
-    # 8. EYE
-    if eye_mode == "happy":
-        d.line([(hx + 2, hy - 1), (hx + 5, hy - 3), (hx + 8, hy - 1)], fill=c["ink"], width=2)
-        d.point((hx + 6, hy + 4), fill=c["blush"])
+    # 8. EYE (睁开大圆眼 - 专注低头注视背后羽毛，带灵动水润高光)
+    if eye_mode == "blink":
+        # 偶尔舒适微闭细线
+        d.line([(hx + 3, hy - 3), (hx + 6, hy - 1), (hx + 8, hy - 3)], fill=c["ink"], width=2)
     else:
-        d.line([(hx + 2, hy - 1), (hx + 5, hy), (hx + 8, hy - 1)], fill=c["ink"], width=2)
+        # 睁开大圆眼 (5x6 萌系圆润大黑眼珠，与 idle/stand 保持统一风格)
+        d.ellipse((hx + 3, hy - 6, hx + 7, hy - 1), fill=c["ink"])
+        # 水润纯白高光点
+        d.point((hx + 4, hy - 5), fill=c["white"])
 
     # 9. CREST
     crest_outer = [
@@ -944,7 +947,7 @@ def render_preen_back_frame(phase=0):
 
     # 10. BEAK
     bx_base = hx + 6
-    by_base = hy + 3
+    by_base = hy + 4
     bx_tip = hx + 12 + beak_reach
     by_tip = hy + 9 + beak_reach
 

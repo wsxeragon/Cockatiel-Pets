@@ -21,36 +21,37 @@ C = dict(
     beak="#a99b9a", foot="#bba5a5", blush="#f2826a"
 )
 
-def render_preen_back_frame(phase=0):
+def render_preen_back_frame(phase=0, eye_mode=None):
     """
     Render 100x80 pixel sprite for preening back feathers.
     phase:
       0: Turn & Enter (Head turned back, beak touching wing/back)
       1: Deep Nibble (Head deeper into feathers, wing ruffles slightly)
-      2: Pull & Preen (Beak nibbles feather strand, happy squint, tiny fluffy down particle)
+      2: Pull & Preen (Beak nibbles feather strand, open eye or soft blink, tiny fluffy down particle)
       3: Relax & Settle (Beak loosens, feathers settle back)
     """
     im = Image.new("RGBA", (100, 80))
     d = ImageDraw.Draw(im)
     c = C
 
+    default_eye = "open"
     # --- Phase Parameters ---
     if phase == 0:
-        # 帧 0: 转头探背，嘴尖刚刚触碰到背部羽毛
+        # 帧 0: 转头探背，嘴尖刚刚触碰到背部羽毛，大圆眼专注注视
         head_x, head_y = 48, 38
         beak_reach = 0        # 深入程度
         wing_ruffle = 0       # 翅膀蓬起
-        eye_mode = "cozy"     # 惬意闭眼
+        default_eye = "open"  # 睁开大圆眼
         crest_wag = 0         # 冠羽自然顺贴
         feather_particle = False
         body_breath = 0
 
     elif phase == 1:
-        # 帧 1: 嘴壳深埋进背羽，头部微下探啄弄
+        # 帧 1: 嘴壳深埋进背羽，头部微下探啄弄，专注注视啄羽处
         head_x, head_y = 50, 40
         beak_reach = 2
         wing_ruffle = 2       # 翅羽被嘴壳挑起膨起
-        eye_mode = "happy"    # 眯眯笑眼
+        default_eye = "open"  # 睁开大圆眼
         crest_wag = 1         # 冠羽随低头微颤
         feather_particle = False
         body_breath = 1
@@ -60,7 +61,7 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 49, 39
         beak_reach = 1
         wing_ruffle = 3       # 翅羽处于挑理最高点
-        eye_mode = "happy"
+        default_eye = "open"  # 睁开大圆眼 (亦可轻柔微眨)
         crest_wag = 2
         feather_particle = True # 产生一颗小羽屑/绒毛
         body_breath = 1
@@ -70,10 +71,12 @@ def render_preen_back_frame(phase=0):
         head_x, head_y = 47, 37
         beak_reach = 0
         wing_ruffle = 1
-        eye_mode = "cozy"
+        default_eye = "open"  # 睁开大圆眼
         crest_wag = 0
         feather_particle = False
         body_breath = 0
+
+    effective_eye = eye_mode if eye_mode is not None else default_eye
 
     # 1. TAIL (尾羽 - 依然向右后方自然延伸)
     d.polygon([(61, 52), (96, 54), (98, 58), (68, 60), (60, 56)], fill=c["ink"])
@@ -144,14 +147,15 @@ def render_preen_back_frame(phase=0):
     # 7. CHEEK (招牌大腮红 - 位于面部右侧偏下)
     d.ellipse((hx + 1, hy + 1, hx + 10, hy + 10), fill=c["cheek"])
 
-    # 8. EYE (舒适眯眼或闭眼)
-    if eye_mode == "happy":
-        # 惬意享受笑眼 (^_^)
-        d.line([(hx + 2, hy - 1), (hx + 5, hy - 3), (hx + 8, hy - 1)], fill=c["ink"], width=2)
-        d.point((hx + 6, hy + 4), fill=c["blush"])
+    # 8. EYE (睁开大圆眼 - 专注低头注视背后羽毛，带灵动高光)
+    if effective_eye == "blink":
+        # 偶尔舒适微闭细线
+        d.line([(hx + 3, hy - 3), (hx + 6, hy - 1), (hx + 8, hy - 3)], fill=c["ink"], width=2)
     else:
-        # 平和安详闭眼细线
-        d.line([(hx + 2, hy - 1), (hx + 5, hy), (hx + 8, hy - 1)], fill=c["ink"], width=2)
+        # 睁开大圆眼 (5x6 萌系圆润大眼，与 idle 保持一致视觉比例与水灵眼神)
+        d.ellipse((hx + 3, hy - 6, hx + 7, hy - 1), fill=c["ink"])
+        # 水润纯白高光点
+        d.point((hx + 4, hy - 5), fill=c["white"])
 
     # 9. CREST (羽冠 - 优美向左上方回卷的弧形长羽)
     # 玄凤低头转颈时，羽冠根部在头顶右前方，向后掠向左上方并自然微扬
@@ -178,7 +182,7 @@ def render_preen_back_frame(phase=0):
 
     # 10. BEAK (小嘴喙 - 真正向右下方埋进背后翅羽中！)
     bx_base = hx + 6
-    by_base = hy + 3
+    by_base = hy + 4
     bx_tip = hx + 12 + beak_reach
     by_tip = hy + 9 + beak_reach
 
@@ -274,6 +278,18 @@ def build_preen_suite():
         disposal=2
     )
 
+    # 方案 C: 第2帧顺羽微眨眼对比版 (睁眼理羽 + 轻柔微眨)
+    f_blink = [render_preen_back_frame(0), render_preen_back_frame(1), render_preen_back_frame(2, eye_mode="blink"), render_preen_back_frame(3)]
+    scaled_blink = [f.resize((300, 240), Image.NEAREST) for f in f_blink]
+    scaled_blink[0].save(
+        OUT_DIR / "preen_open_blink_3x.gif",
+        save_all=True,
+        append_images=scaled_blink[1:],
+        duration=[320, 260, 280, 340],
+        loop=0,
+        disposal=2
+    )
+
     # 4. 2x 逐帧分解对比图谱 (旧版 vs 新版)
     comp_w = 100 * 4
     comp_h = 80 * 2 + 10
@@ -315,6 +331,14 @@ def build_preen_suite():
             save_all=True,
             append_images=scaled_new[1:],
             duration=[200, 160, 180, 220],
+            loop=0,
+            disposal=2
+        )
+        scaled_blink[0].save(
+            ARTIFACT_DIR / "preen_open_blink_3x.gif",
+            save_all=True,
+            append_images=scaled_blink[1:],
+            duration=[320, 260, 280, 340],
             loop=0,
             disposal=2
         )

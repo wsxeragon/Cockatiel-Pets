@@ -57,7 +57,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["waddle_0", "waddle_1", "waddle_2", "waddle_3"], frame_interval_ms=180
     ),
     BehaviorType.IDLE_PECK: BehaviorDef(
-        BehaviorType.IDLE_PECK, "闲置自然啄食", 15.0, -0.3, 0.0, 0.1, 2.5, 0.8,
+        BehaviorType.IDLE_PECK, "闲置自然啄食", 15.0, -0.3, 0.0, 0.1, 30.0, 3.0,
         ["peck_0", "peck_1", "peck_2", "peck_3"], frame_interval_ms=180
     ),
     BehaviorType.IDLE_FLY: BehaviorDef(
@@ -67,7 +67,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     # 闲置搞事
     BehaviorType.MISCHIEF_CHEW: BehaviorDef(
-        BehaviorType.MISCHIEF_CHEW, "啃咬屏幕(拆家)", 3.0, -0.5, -0.1, 0.9, 4.0, 1.0,
+        BehaviorType.MISCHIEF_CHEW, "啃咬屏幕(拆家)", 3.0, -0.5, -0.1, 0.9, 30.0, 3.0,
         ["chew_0", "chew_1", "chew_0", "chew_1"], frame_interval_ms=160
     ),
     # 舒适
@@ -80,7 +80,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["preen_0", "preen_1", "preen_0", "preen_1"], frame_interval_ms=280
     ),
     BehaviorType.COMFORT_BOW: BehaviorDef(
-        BehaviorType.COMFORT_BOW, "低头求撸毛", 2.0, -0.6, 1.2, 0.0, 4.0, 1.0,
+        BehaviorType.COMFORT_BOW, "低头求撸毛", 2.0, -0.6, 1.2, 0.0, 10.0, 1.0,
         ["bow_0", "bow_1", "bow_0"]
     ),
     BehaviorType.COMFORT_APPROACH: BehaviorDef(
@@ -97,7 +97,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     # 兴奋
     BehaviorType.EXCITE_HOP: BehaviorDef(
-        BehaviorType.EXCITE_HOP, "移动雀跃小跳", 8.0, -0.2, 0.1, 0.8, 3.2, 0.8,
+        BehaviorType.EXCITE_HOP, "移动雀跃小跳", 8.0, -0.2, 0.1, 0.8, 30.0, 3.0,
         ["hop_0", "hop_1", "hop_2", "hop_3"], frame_interval_ms=130
     ),
     BehaviorType.EXCITE_BOB: BehaviorDef(
@@ -105,19 +105,19 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["bob_0", "bob_1", "bob_0", "bob_1"], frame_interval_ms=160
     ),
     BehaviorType.EXCITE_HEART_WINGS: BehaviorDef(
-        BehaviorType.EXCITE_HEART_WINGS, "心形翅膀(自嗨)", 2.0, -0.5, 0.3, 1.1, 4.0, 1.0,
+        BehaviorType.EXCITE_HEART_WINGS, "心形翅膀(自嗨)", 2.0, -0.5, 0.3, 1.1, 30.0, 3.0,
         ["heart_wings_0", "heart_wings_1", "heart_wings_0"], frame_interval_ms=240
     ),
     BehaviorType.EXCITE_SING: BehaviorDef(
-        BehaviorType.EXCITE_SING, "吹口哨唱歌独奏", 1.0, -0.6, 0.2, 1.4, 300.0, 20.0,
+        BehaviorType.EXCITE_SING, "吹口哨唱歌独奏", 1.0, -0.6, 0.2, 1.4, 180.0, 15.0,
         ["sing_0", "sing_1", "sing_2", "sing_1"], frame_interval_ms=200
     ),
     BehaviorType.EXCITE_BONK: BehaviorDef(
-        BehaviorType.EXCITE_BONK, "嘴壳敲屏(自嗨敲打)", 2.5, -0.4, 0.3, 1.2, 3.5, 0.8,
+        BehaviorType.EXCITE_BONK, "嘴壳敲屏(自嗨敲打)", 2.5, -0.4, 0.3, 1.2, 60.0, 5.0,
         ["bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4", "bonk_0"], frame_interval_ms=160
     ),
     BehaviorType.EXCITE_DOUBLE_PECK: BehaviorDef(
-        BehaviorType.EXCITE_DOUBLE_PECK, "连环双击啄桌面", 3.0, -0.4, 0.2, 1.2, 3.2, 0.6,
+        BehaviorType.EXCITE_DOUBLE_PECK, "连环双击啄桌面", 3.0, -0.4, 0.2, 1.2, 60.0, 5.0,
         ["peck_0", "peck_1", "peck_2", "peck_1", "peck_2", "peck_3"], frame_interval_ms=140
     ),
     # 应激

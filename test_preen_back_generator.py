@@ -179,11 +179,11 @@ def render_preen_back_frame(phase=0, eye_mode=None):
     # 顺羽毛流光线
     d.line([(hx - 1, hy - 11), (hx - 9 - crest_wag, hy - 18 - crest_wag)], fill=c["yellow"], width=1)
 
-    # 10. BEAK (小嘴喙 - 真正向右下方埋进背后翅羽中！)
-    bx_base = hx + 6
+    # 10. BEAK (小嘴喙 - 朝外舒展 +3px，清晰从面部前端伸出，尖端自然埋进背后翅羽)
+    bx_base = hx + 9
     by_base = hy + 4
-    bx_tip = hx + 12 + beak_reach
-    by_tip = hy + 9 + beak_reach
+    bx_tip = hx + 17 + beak_reach
+    by_tip = hy + 10 + beak_reach
 
     beak_upper = [
         (bx_base, by_base - 2),
@@ -204,18 +204,17 @@ def render_preen_back_frame(phase=0, eye_mode=None):
     d.polygon(beak_inner, fill=c["beak"])
     d.point((bx_base + 2, by_base), fill="#c8b8b5")
 
-    # 11. OVERLAPPING BACK FEATHER RUFFLES (肩羽与覆羽遮挡层 - 产生深埋进羽毛的真实体积)
+    # 11. OVERLAPPING BACK FEATHER RUFFLES (覆羽轻盈遮挡尖端，嘴壳立体舒展外露)
     ruffle_cover = [
-        (bx_tip - 2, by_tip - 3),
+        (bx_tip - 1, by_tip - 2),
         (bx_tip + 3, by_tip - 1),
         (bx_tip + 6, by_tip + 4),
         (bx_tip + 2, by_tip + 6),
-        (bx_tip - 3, by_tip + 1)
+        (bx_tip - 2, by_tip + 2)
     ]
     d.polygon(ruffle_cover, fill=c["ink"])
     d.polygon([(x, y) for x, y in ruffle_cover[:-1]], fill=c["dark"])
-    d.line([(bx_tip - 1, by_tip + 1), (bx_tip + 3, by_tip + 3)], fill=c["light"], width=1)
-    d.point((bx_tip + 1, by_tip - 2), fill=c["white"])
+    d.line([(bx_tip, by_tip + 2), (bx_tip + 3, by_tip + 3)], fill=c["light"], width=1)
 
     # 12. FEATHER DANDER / FLUFFY DOWN (梳理挑起的极细小白绒毛微粒)
     if feather_particle:

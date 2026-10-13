@@ -190,44 +190,47 @@ class MoodDynamics:
         stress = max(self.fright, self.excitement * 0.7, (self.comfort - 30) * 0.5)
         self.calm = max(0.0, min(100.0, 100.0 - stress))
 
-        # 活动积累疲劳；站立休息会缓慢恢复，睡觉恢复更快。
-        active_rates = {
-            # Preserve approximately the old total change over the new,
-            # minute-scale action durations.
-            BehaviorType.IDLE_BLINK: -0.00035,
-            BehaviorType.IDLE_WADDLE: 0.0026,
-            BehaviorType.IDLE_FLY: 0.65,
-            BehaviorType.EXCITE_HOP: 0.0019,
-            BehaviorType.EXCITE_BOB: 0.007,
-            BehaviorType.EXCITE_HEART_WINGS: 0.09,
-            BehaviorType.EXCITE_SING: 0.0012,
-            BehaviorType.MISCHIEF_CHEW: 0.10,
-            BehaviorType.COMFORT_APPROACH: 0.35,
-            BehaviorType.FRIGHT_PANIC_FLY: 0.55,
-            BehaviorType.COMFORT_FLUFF: -0.0010,
-            BehaviorType.COMFORT_PREEN: -0.0016,
-        }
+        # 3. 疲劳度更新逻辑
         if behavior == BehaviorType.REST_SLEEP:
-            # Sleep restores fatigue gently; it is intentionally 10x slower
-            # than the earlier fast recovery so naps feel substantial.
-            rate = -0.038
-        elif behavior in active_rates:
-            rate = active_rates[behavior]
-        elif self.calm >= 70.0:
-            rate = -0.035
+            # 睡眠状态：严格暂停随时间增加的被动疲劳增长（增量为 0）
+            # 稳定执行精力恢复（速率 -0.10 点/秒，即每分钟恢复 6 点疲劳，疲劳只减不增）
+            sleep_recovery_rate = -0.10
+            self.fatigue = max(0.0, min(100.0, self.fatigue + sleep_recovery_rate * dt))
         else:
-            rate = 0.02
+            # 清醒状态：活动消耗 + 随时间自然疲劳积累
+            active_rates = {
+                # Preserve approximately the old total change over the new,
+                # minute-scale action durations.
+                BehaviorType.IDLE_BLINK: -0.00035,
+                BehaviorType.IDLE_WADDLE: 0.0026,
+                BehaviorType.IDLE_FLY: 0.65,
+                BehaviorType.EXCITE_HOP: 0.0019,
+                BehaviorType.EXCITE_BOB: 0.007,
+                BehaviorType.EXCITE_HEART_WINGS: 0.09,
+                BehaviorType.EXCITE_SING: 0.0012,
+                BehaviorType.MISCHIEF_CHEW: 0.10,
+                BehaviorType.COMFORT_APPROACH: 0.35,
+                BehaviorType.FRIGHT_PANIC_FLY: 0.55,
+                BehaviorType.COMFORT_FLUFF: -0.0010,
+                BehaviorType.COMFORT_PREEN: -0.0016,
+            }
+            if behavior in active_rates:
+                rate = active_rates[behavior]
+            elif self.calm >= 70.0:
+                rate = -0.035
+            else:
+                rate = 0.02
 
-        # 4. 非睡眠状态下，每分钟额外随时间增加 1 点疲劳 (+1.0 / 60.0 点/秒)
-        passive_fatigue_rate = (1.0 / 60.0) if behavior != BehaviorType.REST_SLEEP else 0.0
-        total_rate = rate + passive_fatigue_rate
+            # 清醒状态下，每分钟额外随时间增加 1 点疲劳 (+1.0 / 60.0 点/秒)
+            passive_fatigue_rate = 1.0 / 60.0
+            total_rate = rate + passive_fatigue_rate
 
-        # 兴奋状态下，疲劳值增加速度提升 2 倍
-        is_excited_state = (self.excitement >= 40.0 or behavior in EXCITED_BEHAVIORS)
-        if is_excited_state and total_rate > 0:
-            total_rate *= 2.0
+            # 兴奋状态下，疲劳累积速度提升 2 倍
+            is_excited_state = (self.excitement >= 40.0 or behavior in EXCITED_BEHAVIORS)
+            if is_excited_state and total_rate > 0:
+                total_rate *= 2.0
 
-        self.fatigue = max(0.0, min(100.0, self.fatigue + total_rate * dt))
+            self.fatigue = max(0.0, min(100.0, self.fatigue + total_rate * dt))
 
     def must_sleep(self) -> bool:
         """疲劳度大于 90% 且惊吓值 < 50% 时，强制进入睡眠"""

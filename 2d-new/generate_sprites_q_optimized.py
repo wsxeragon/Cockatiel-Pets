@@ -1,6 +1,7 @@
 """Q-Version Cockatiel Animation Optimization Suite.
 Generates refined 100x80 procedural pixel sprites into D:\pets\2d-new\sprites.
 """
+import math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont
 
@@ -300,6 +301,223 @@ def sleeping_bird_q_optimized(puff=0, head=0, zzz=0):
             d.line([(x, y), (x + size, y), (x, y + size), (x + size, y + size)], fill=zc, width=1)
     return im
 
+def make_radiating_wedge(origin, angle_deg, r_start, r_end, w_start, w_end):
+    """Generate a wedge radiating from origin at angle_deg (180=left, 90=up).
+    Narrow base at r_start with half-width w_start.
+    Wide tip at r_end with half-width w_end.
+    Returns (outer_polygon, inner_polygon).
+    """
+    ox, oy = origin
+    rad = math.radians(angle_deg)
+    ux = math.cos(rad)
+    uy = -math.sin(rad)
+    px = -uy
+    py = ux
+
+    p1 = (ox + ux * r_start - px * w_start, oy + uy * r_start - py * w_start)
+    p2 = (ox + ux * r_start + px * w_start, oy + uy * r_start + py * w_start)
+    p3 = (ox + ux * r_end + px * w_end,     oy + uy * r_end + py * w_end)
+    p4 = (ox + ux * r_end - px * w_end,     oy + uy * r_end - py * w_end)
+
+    r_in_start = r_start + 1.2
+    r_in_end = r_end - 1.2
+    w_in_start = max(0.5, w_start - 0.9)
+    w_in_end = max(1.0, w_end - 1.0)
+    q1 = (ox + ux * r_in_start - px * w_in_start, oy + uy * r_in_start - py * w_in_start)
+    q2 = (ox + ux * r_in_start + px * w_in_start, oy + uy * r_in_start + py * w_in_start)
+    q3 = (ox + ux * r_in_end + px * w_in_end,     oy + uy * r_in_end + py * w_in_end)
+    q4 = (ox + ux * r_in_end - px * w_in_end,     oy + uy * r_in_end - py * w_in_end)
+
+    return [p1, p2, p3, p4], [q1, q2, q3, q4]
+
+def draw_mouth_radiating_sound(im, mouth_origin=(16, 35), gap=4.5):
+    """Draw 3 sound wedges radiating OUTWARDS from the mouth.
+    Narrow ends near mouth, widening as they shoot forward and upward into the air.
+    """
+    im = im.copy()
+    d = ImageDraw.Draw(im)
+    ox, oy = mouth_origin
+    c_yellow = "#ffd100"
+    c_orange = "#ff9800"
+    c_dark = "#4a3b2c"
+
+    # 1. TOP WEDGE: Shoots steep up-left towards sky (angle ~112 deg)
+    top_out, top_in = make_radiating_wedge(
+        origin=(ox, oy),
+        angle_deg=112,
+        r_start=gap + 2.0,
+        r_end=gap + 15.0,
+        w_start=1.6,
+        w_end=2.6
+    )
+
+    # 2. MID WEDGE: Longest, shoots forward-up at ~144 deg (main shriek beam)
+    mid_out, mid_in = make_radiating_wedge(
+        origin=(ox, oy),
+        angle_deg=144,
+        r_start=gap + 0.5,
+        r_end=gap + 13.5,
+        w_start=1.8,
+        w_end=3.6
+    )
+
+    # 3. BOT WEDGE: Shoots straight forward-left at ~174 deg (lower beam)
+    bot_out, bot_in = make_radiating_wedge(
+        origin=(ox, oy),
+        angle_deg=174,
+        r_start=gap + 1.5,
+        r_end=gap + 11.5,
+        w_start=1.5,
+        w_end=2.6
+    )
+
+    for outer, inner in [(top_out, top_in), (mid_out, mid_in), (bot_out, bot_in)]:
+        outer_pts = [(round(x), round(y)) for x, y in outer]
+        inner_pts = [(round(x), round(y)) for x, y in inner]
+        for dx, dy in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            d.polygon([(x + dx, y + dy) for x, y in outer_pts], fill=c_dark)
+        d.polygon(outer_pts, fill=c_yellow)
+        d.polygon(inner_pts, fill=c_orange)
+
+    d.point((ox - 2, oy - 1), fill=c_yellow)
+    d.point((ox - 3, oy - 2), fill=c_orange)
+
+    return im
+
+def render_bird_flight_custom(
+    wing_phase=0,      # 0: Up Apex, 1: Power Down, 2: Bottom Lift, 3: Recovery Fold
+    lift=-6,
+    head=(-2, -1),
+    tail_angle=0,
+    crest_style="streamline",
+    eye="wide"
+):
+    """Render a dedicated 100x80 aerodynamic flight frame with organic wing mechanics."""
+    im = Image.new("RGBA", (100, 80))
+    d = ImageDraw.Draw(im)
+    c = C
+
+    # 1. TAIL (尾羽 - 随下扑升力调整展翼舵角)
+    tx_off = tail_angle
+    tail_pts_outer = [
+        (61, 47 + lift),
+        (96 + tx_off, 49 + lift),
+        (98 + tx_off, 53 + lift),
+        (68, 56 + lift),
+        (60, 52 + lift)
+    ]
+    d.polygon(tail_pts_outer, fill=c["ink"])
+    d.polygon([
+        (63, 48 + lift),
+        (95 + tx_off, 50 + lift),
+        (92 + tx_off, 53 + lift),
+        (67, 53 + lift)
+    ], fill=c["dark"])
+    d.line([(71, 51 + lift), (92 + tx_off, 51 + lift)], fill=c["light"])
+
+    # 2. FAR WING (远侧后翅 - 具立体透视阴影)
+    far_shapes = {
+        0: [(53, 41), (74, 8), (81, 4), (72, 38)],
+        1: [(54, 42), (84, 25), (96, 28), (76, 46), (62, 49)],
+        2: [(53, 44), (75, 62), (80, 65), (65, 54)],
+        3: [(52, 41), (68, 22), (76, 27), (65, 40)]
+    }[wing_phase]
+    d.polygon([(x, y + lift) for x, y in far_shapes], fill=c["dark"])
+
+    # 3. TUCKED FEET (飞行小爪紧贴胖肚皮)
+    for fx in (48, 56):
+        d.line([(fx, 62 + lift), (fx + 4, 62 + lift)], fill=c["ink"], width=2)
+        d.line([(fx, 62 + lift), (fx + 4, 62 + lift)], fill=c["foot"], width=1)
+
+    # 4. STREAMLINED CHUBBY BODY (前倾流线型身躯)
+    body_x0 = 33
+    body_y0 = 32 + lift
+    body_x1 = 73
+    body_y1 = 68 + lift
+    d.ellipse((body_x0, body_y0, body_x1, body_y1), fill=c["ink"])
+    d.ellipse((body_x0 + 2, body_y0 + 2, body_x1 - 2, body_y1 - 2), fill=c["grey"])
+    d.ellipse((body_x0 + 4, body_y0 + 6, body_x0 + 24, body_y1 - 6), fill=c["light"])
+
+    # 5. NEAR WING (近侧主翼 - 具受风微弧度与饱满纯白飞羽斑)
+    if wing_phase == 0:
+        near_outer = [(48, 43), (55, 23), (62, 5), (68, 7), (67, 30), (56, 50)]
+        near_white = [(51, 41), (58, 21), (63, 11), (63, 27), (55, 46)]
+    elif wing_phase == 1:
+        near_outer = [(47, 43), (63, 33), (85, 28), (92, 33), (86, 46), (68, 53), (54, 52)]
+        near_white = [(50, 42), (66, 35), (84, 32), (80, 43), (64, 48), (53, 48)]
+    elif wing_phase == 2:
+        near_outer = [(48, 44), (58, 52), (74, 66), (78, 70), (72, 73), (63, 64), (54, 56)]
+        near_white = [(51, 46), (60, 53), (73, 67), (68, 68), (55, 54)]
+    else:
+        near_outer = [(48, 43), (56, 30), (66, 26), (76, 37), (73, 44), (60, 48), (52, 50)]
+        near_white = [(51, 41), (58, 31), (67, 28), (70, 36), (61, 44), (54, 46)]
+
+    d.polygon([(x, y + lift) for x, y in near_outer], fill=c["ink"])
+    d.polygon([(x, y + lift) for x, y in near_white], fill=c["white"])
+
+    # 6. NECK & HEAD (前探流线型颈部与大头)
+    hx = 33 + head[0]
+    hy = 33 + head[1] + lift
+    neck_poly = [
+        (hx - 2, hy + 5),
+        (hx + 10, hy + 2),
+        (body_x0 + 15, body_y0 + 8),
+        (body_x0 + 6, body_y0 + 18),
+        (hx + 2, hy + 14)
+    ]
+    d.polygon(neck_poly, fill=c["ink"])
+    d.polygon([(x, y) for x, y in neck_poly[:-1]], fill=c["grey"])
+
+    d.ellipse((hx - 13, hy - 13, hx + 13, hy + 13), fill=c["ink"])
+    d.ellipse((hx - 12, hy - 12, hx + 11, hy + 12), fill=c["yellow"])
+    d.polygon([(hx + 6, hy - 9), (hx + 12, hy - 5), (hx + 13, hy + 9), (hx + 6, hy + 12)], fill=c["white"])
+    d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
+
+    # 7. CREST (羽冠 - 顺风流线型后掠，速度感十足)
+    if crest_style == "streamline":
+        wave_y = 1 if wing_phase in (1, 2) else 0
+        crest_outer = [
+            (hx - 4, hy - 11),
+            (hx + 8, hy - 18 + wave_y),
+            (hx + 20, hy - 16 + wave_y),
+            (hx + 17, hy - 11),
+            (hx + 5, hy - 9)
+        ]
+        crest_inner = [
+            (hx - 2, hy - 12),
+            (hx + 7, hy - 17 + wave_y),
+            (hx + 19, hy - 15 + wave_y),
+            (hx + 15, hy - 12),
+            (hx + 3, hy - 10)
+        ]
+        d.polygon(crest_outer, fill=c["shade"])
+        d.polygon(crest_inner, fill=c["yellow"])
+    else:
+        d.polygon([(hx - 5, hy - 10), (hx - 1, hy - 28), (hx + 2, hy - 30), (hx + 3, hy - 11)], fill=c["shade"])
+        d.polygon([(hx, hy - 11), (hx + 7, hy - 25), (hx + 9, hy - 24), (hx + 4, hy - 9)], fill=c["yellow"])
+
+    # 8. EYES
+    d.ellipse((hx - 9, hy - 7, hx - 3, hy + 1), fill=c["ink"])
+    d.point((hx - 7, hy - 5), fill=c["white"])
+
+    # 9. BEAK
+    d.polygon([(hx - 11, hy + 4), (hx - 13, hy + 6), (hx - 11, hy + 8), (hx - 9, hy + 6)], fill=c["ink"])
+    d.polygon([(hx - 11, hy + 5), (hx - 12, hy + 6), (hx - 10, hy + 7)], fill=c["beak"])
+    upper = [
+        (hx - 10, hy - 2), (hx - 13, hy - 2), (hx - 15, hy),
+        (hx - 16, hy + 2), (hx - 16, hy + 4), (hx - 14, hy + 6),
+        (hx - 13, hy + 8), (hx - 13, hy + 5), (hx - 10, hy + 2)
+    ]
+    d.polygon(upper, fill=c["ink"])
+    d.polygon([
+        (hx - 11, hy - 1), (hx - 13, hy - 1), (hx - 15, hy + 1),
+        (hx - 15, hy + 4), (hx - 13, hy + 6), (hx - 13, hy + 5),
+        (hx - 10, hy + 2)
+    ], fill=c["beak"])
+    d.point((hx - 14, hy + 1), fill="#c8b8b5")
+
+    return im
+
 def generate_optimized_suite():
     # 1. 走动 (Waddle) - 注入外八字左右重心摇摆与尾巴反向微颤！
     frames = {
@@ -352,18 +570,21 @@ def generate_optimized_suite():
         # 警觉
         "alert_0": bird_q_optimized(head=(0, -4), crest="alert", eye="wide"),
         
-        # 反咬
-        "bite_0": bird_q_optimized(head=(-8, -1), crest="alert", eye="wide", mouth="bite"),
-        "bite_1": bird_q_optimized(head=(-3, 0), crest="alert", eye="wide", mouth="bite"),
+        # 反咬受惊威慑 (以嘴巴为发散原点向前方辐射展开金黄三向音波)
+        "bite_0": bird_q_optimized(head=(1, -2), body_roll=1, tail_wag=-1, crest="alert", eye="wide", mouth="closed"),
+        "bite_1": draw_mouth_radiating_sound(bird_q_optimized(head=(-1, -1), body_roll=-1, tail_wag=3, crest="alert", eye="wide", mouth="bite"), mouth_origin=(15, 35), gap=4.5),
+        "bite_2": draw_mouth_radiating_sound(bird_q_optimized(head=(0, 0), body_roll=-1, tail_wag=2, crest="alert", eye="wide", mouth="bite"), mouth_origin=(16, 36), gap=4.5),
+        "bite_3": bird_q_optimized(head=(-1, -1), body_roll=0, tail_wag=1, crest="alert", eye="wide", mouth="closed"),
         
         # 哈气
         "hiss_0": bird_q_optimized(head=(-2, 2), puff=2, crest="alert", eye="wide", mouth="hiss"),
         "hiss_1": bird_q_optimized(head=(-4, 4), puff=5, crest="alert", eye="wide", mouth="hiss", lift=-1),
         
-        # 飞行 (小短腿紧贴肚皮，3段流线型扑翼)
-        "fly_0": bird_q_optimized(wing="fly_up", lift=-5, crest="alert", tuck_feet=True),
-        "fly_1": bird_q_optimized(wing="fly_mid", lift=-5, crest="alert", tuck_feet=True),
-        "fly_2": bird_q_optimized(wing="fly_down", lift=-7, crest="alert", tuck_feet=True),
+        # 飞行 (4帧有机动力学扑翼：风阻流线羽冠、升力沉浮、柔韧折翼)
+        "fly_0": render_bird_flight_custom(wing_phase=0, lift=-4, head=(-2, -1), tail_angle=0),
+        "fly_1": render_bird_flight_custom(wing_phase=1, lift=-6, head=(-3, 0), tail_angle=2),
+        "fly_2": render_bird_flight_custom(wing_phase=2, lift=-8, head=(-3, 0), tail_angle=1),
+        "fly_3": render_bird_flight_custom(wing_phase=3, lift=-5, head=(-2, -1), tail_angle=0),
         
         # 母鸡蹲睡觉 (双脚彻底收进肚子里，软糖压扁)
         "sleep_0": sleeping_bird_q_optimized(puff=0, head=-1, zzz=1),
@@ -375,6 +596,14 @@ def generate_optimized_suite():
     # Save optimized sprites
     for name, img in frames.items():
         img.save(OUT_NEW / f"{name}.png")
+
+    # Sync bite & fly frames to main assets/sprites directory
+    assets_sprites = Path(r"D:\pets\assets\sprites")
+    if assets_sprites.exists():
+        for b_name in ["bite_0", "bite_1", "bite_2", "bite_3", "fly_0", "fly_1", "fly_2", "fly_3"]:
+            if b_name in frames:
+                frames[b_name].save(assets_sprites / f"{b_name}.png")
+                print(f"Synced {b_name}.png to {assets_sprites}")
     
     # Also copy original backup sprites for 1-to-1 comparison
     src_orig = Path(r"D:\pets\backup_original\assets\sprites")

@@ -51,6 +51,7 @@ class CockatielWindow(QWidget):
         self.waddle_direction: int = -1 # 参考图面向左
         self.facing_direction: int = -1 # 1: 右, -1: 左
         self.waddle_step_count: int = 0
+        self.hop_direction: int = -1    # 移动小跳方向
 
         # 雷达 HUD 监视器引用
         self.hud_window = None
@@ -115,6 +116,19 @@ class CockatielWindow(QWidget):
         self.action_end_time = time.time() + duration
         if feedback:
             self.last_feedback = feedback
+
+        # 移动雀跃小跳：根据屏幕边缘自适应随机选择起跳方向
+        if new_b_def.code == BehaviorType.EXCITE_HOP:
+            screen = QApplication.primaryScreen().geometry()
+            cur_x = self.x()
+            if cur_x < 90:
+                self.hop_direction = 1
+            elif cur_x > screen.width() - self.width() - 90:
+                self.hop_direction = -1
+            else:
+                self.hop_direction = random.choice([-1, 1])
+            self.facing_direction = self.hop_direction
+
         # 调整帧播放速率
         self.anim_timer.setInterval(new_b_def.frame_interval_ms)
         self.update()
@@ -149,11 +163,73 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update_view()
 
+    def trigger_bonk(self, reason: str = "兴奋自嗨：用嘴壳敲击屏幕！"):
+        """靠拢最近的屏幕边缘并进入嘴壳敲击状态"""
+        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            self.wake_up("被敲屏冲动唤醒！")
+        screen = QApplication.primaryScreen().geometry()
+        cur_pos = self.pos()
+        dist_to_left = cur_pos.x()
+        dist_to_right = screen.width() - self.width() - cur_pos.x()
+        if dist_to_left < dist_to_right:
+            new_x = 25
+            self.facing_direction = -1
+            self.waddle_direction = 1
+        else:
+            new_x = screen.width() - self.width() - 25
+            self.facing_direction = 1
+            self.waddle_direction = -1
+        self.move(new_x, cur_pos.y())
+        self.mood.excitement = max(self.mood.excitement, 55.0)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2, reason)
+    def trigger_hop(self, reason: str = "兴奋雀跃：移动连环小跳！"):
+        """触发移动雀跃小跳"""
+        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            self.wake_up("被欢快的跳跃冲动唤醒！")
+        self.mood.excitement = max(self.mood.excitement, 65.0)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_HOP], 3.2, reason)
+        if self.hud_window:
+            self.hud_window.update_view()
+
     def on_anim_frame_step(self):
         """动画帧步进"""
         frames = self.current_behavior.frames
         if len(frames) > 1:
             self.current_frame_index = (self.current_frame_index + 1) % len(frames)
+            # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
+            if self.current_behavior.code == BehaviorType.EXCITE_BONK:
+                frame_name = frames[self.current_frame_index]
+                if frame_name == "bonk_2":
+                    shake_offset = -1 if self.facing_direction == -1 else 1
+                    self.move(self.x() + shake_offset, self.y())
+                elif frame_name == "bonk_3":
+                    shake_back = 1 if self.facing_direction == -1 else -1
+                    self.move(self.x() + shake_back, self.y())
+            # 移动雀跃小跳：在各动作帧带动窗口产生连环跳跃位移
+            elif self.current_behavior.code == BehaviorType.EXCITE_HOP:
+                frame_name = frames[self.current_frame_index]
+                hop_dx = 0
+                if frame_name == "hop_1":
+                    hop_dx = 8  # 腾空前跃冲刺
+                elif frame_name == "hop_2":
+                    hop_dx = 4  # 落地触地缓冲滑移
+                elif frame_name == "hop_3":
+                    hop_dx = 2  # 顺势回弹推进
+
+                if hop_dx > 0:
+                    screen = QApplication.primaryScreen().geometry()
+                    cur_x = self.x()
+                    new_x = cur_x + self.hop_direction * hop_dx
+                    # 屏幕边缘反弹转向
+                    if new_x < 25:
+                        new_x = 25
+                        self.hop_direction = 1
+                        self.facing_direction = 1
+                    elif new_x > screen.width() - self.width() - 25:
+                        new_x = screen.width() - self.width() - 25
+                        self.hop_direction = -1
+                        self.facing_direction = -1
+                    self.move(new_x, self.y())
             self.update()
 
     def on_main_tick(self):
@@ -208,17 +284,39 @@ class CockatielWindow(QWidget):
             # 窗口缩小后同步缩短每步的屏幕位移。
             new_x = cur_pos.x() + self.waddle_direction * 2
 
-            # 屏幕边缘折返
-            if new_x < 25:
-                self.waddle_direction = 1
-                self.facing_direction = 1
-                self.waddle_step_count = 0
+            # 屏幕边缘折返与嘴壳敲击判定
+            if new_x <= 25:
                 new_x = 25
-            elif new_x > screen.width() - self.width() - 25:
-                self.waddle_direction = -1
+                self.move(new_x, cur_pos.y())
                 self.facing_direction = -1
                 self.waddle_step_count = 0
+                # 触及屏幕左边缘：若处于兴奋或较活跃状态，高概率停下敲击屏幕边缘！
+                if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
+                    self.waddle_direction = 1  # 敲击结束后调头折返
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2,
+                                         "溜达撞到屏幕左边缘，兴奋用嘴壳敲击屏幕！")
+                    if self.hud_window:
+                        self.hud_window.update_view()
+                    return
+                else:
+                    self.waddle_direction = 1
+                    self.facing_direction = 1
+            elif new_x >= screen.width() - self.width() - 25:
                 new_x = screen.width() - self.width() - 25
+                self.move(new_x, cur_pos.y())
+                self.facing_direction = 1
+                self.waddle_step_count = 0
+                # 触及屏幕右边缘：同样判定嘴壳敲击
+                if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
+                    self.waddle_direction = -1  # 敲击结束后调头折返
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], 3.2,
+                                         "溜达撞到屏幕右边缘，兴奋用嘴壳敲击屏幕！")
+                    if self.hud_window:
+                        self.hud_window.update_view()
+                    return
+                else:
+                    self.waddle_direction = -1
+                    self.facing_direction = -1
             else:
                 # 走了一段距离后 (约 20~35 步，即 2~3.5 秒)，有概率随机调头踱步
                 if self.waddle_step_count > 20 and random.random() < 0.08:
@@ -351,7 +449,7 @@ class CockatielWindow(QWidget):
             self.last_feedback = msg
         else:
             # 咬人反击
-            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.FRIGHT_BITE], 1.2, msg)
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.FRIGHT_BITE], 1.0, msg)
 
     # --- 飞行引擎 (贝塞尔抛物线位移) ---
     def start_flight(self, panic: bool = True, roam: bool = False):
@@ -458,6 +556,10 @@ class CockatielWindow(QWidget):
         """)
         act_hud = menu.addAction("📊 开启/关闭 心态雷达监视器")
         act_sing = menu.addAction("🎵 逗它开心吹口哨")
+        act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
+        act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
+        act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
+        act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_reset = menu.addAction("🔄 重置心态为平静")
@@ -476,6 +578,14 @@ class CockatielWindow(QWidget):
                 self.wake_up("被歌声唤醒了")
             self.mood.excitement = 90.0
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_SING], 6.0, "被主人逗乐，开心大声独唱！")
+        elif res == act_hop:
+            self.trigger_hop("右键菜单触发：欢快移动连环小跳！")
+        elif res == act_bonk:
+            self.trigger_bonk("右键菜单触发：靠边敲击屏幕！")
+        elif res == act_fly:
+            self.start_flight(panic=False, roam=True)
+        elif res == act_fright:
+            self.handle_touch_body()
         elif res == act_sleep:
             self.force_sleep("右键菜单触发：疲劳度拉满，进入熟睡")
         elif res == act_clear_fatigue:

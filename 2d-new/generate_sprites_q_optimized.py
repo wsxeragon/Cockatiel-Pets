@@ -814,7 +814,6 @@ def render_preen_back_frame(phase=0):
 
     if phase == 0:
         head_x, head_y = 48, 38
-        beak_reach = 0
         wing_ruffle = 0
         eye_mode = "open"
         crest_wag = 0
@@ -823,7 +822,6 @@ def render_preen_back_frame(phase=0):
 
     elif phase == 1:
         head_x, head_y = 50, 40
-        beak_reach = 2
         wing_ruffle = 2
         eye_mode = "open"
         crest_wag = 1
@@ -831,9 +829,8 @@ def render_preen_back_frame(phase=0):
         body_breath = 1
 
     elif phase == 2:
-        head_x, head_y = 49, 39
-        beak_reach = 1
-        wing_ruffle = 3
+        head_x, head_y = 49, 38
+        wing_ruffle = 2
         eye_mode = "open"
         crest_wag = 2
         feather_particle = True
@@ -841,7 +838,6 @@ def render_preen_back_frame(phase=0):
 
     else:
         head_x, head_y = 47, 37
-        beak_reach = 0
         wing_ruffle = 1
         eye_mode = "open"
         crest_wag = 0
@@ -945,49 +941,32 @@ def render_preen_back_frame(phase=0):
     d.polygon(crest_inner, fill=c["yellow"])
     d.line([(hx - 1, hy - 11), (hx - 9 - crest_wag, hy - 18 - crest_wag)], fill=c["yellow"], width=1)
 
-    # 10. BEAK (小嘴喙 - 朝外舒展 +3px，清晰从面部前端伸出，尖端自然埋进背后翅羽)
-    bx_base = hx + 9
-    by_base = hy + 4
-    bx_tip = hx + 17 + beak_reach
-    by_tip = hy + 10 + beak_reach
-
-    beak_upper = [
-        (bx_base, by_base - 2),
-        (bx_base + 3, by_base - 1),
-        (bx_tip + 2, by_tip),
-        (bx_tip, by_tip + 3),
-        (bx_base + 1, by_base + 4),
-        (bx_base - 1, by_base + 1)
+    # 10. RIGID BEAK (100% 完全不发生形变的固定小嘴壳 - 严格保持原版几何形状水平镜像)
+    upper = [
+        (hx + 9, hy - 1), (hx + 12, hy - 1), (hx + 14, hy + 1),
+        (hx + 15, hy + 3), (hx + 15, hy + 5), (hx + 13, hy + 7),
+        (hx + 12, hy + 9), (hx + 12, hy + 6), (hx + 9, hy + 3)
     ]
-    beak_inner = [
-        (bx_base + 1, by_base - 1),
-        (bx_base + 3, by_base),
-        (bx_tip + 1, by_tip),
-        (bx_tip, by_tip + 2),
-        (bx_base + 1, by_base + 3)
+    inner = [
+        (hx + 10, hy), (hx + 12, hy), (hx + 14, hy + 2),
+        (hx + 14, hy + 5), (hx + 12, hy + 7), (hx + 12, hy + 6),
+        (hx + 9, hy + 3)
     ]
-    d.polygon(beak_upper, fill=c["ink"])
-    d.polygon(beak_inner, fill=c["beak"])
-    d.point((bx_base + 2, by_base), fill="#c8b8b5")
+    lower_out = [(hx + 10, hy + 5), (hx + 12, hy + 7), (hx + 10, hy + 9), (hx + 8, hy + 7)]
+    lower_in = [(hx + 10, hy + 6), (hx + 11, hy + 7), (hx + 9, hy + 8)]
 
-    # 11. OVERLAPPING BACK FEATHER RUFFLES (覆羽轻盈遮挡尖端，嘴壳立体舒展外露)
-    ruffle_cover = [
-        (bx_tip - 1, by_tip - 2),
-        (bx_tip + 3, by_tip - 1),
-        (bx_tip + 6, by_tip + 4),
-        (bx_tip + 2, by_tip + 6),
-        (bx_tip - 2, by_tip + 2)
-    ]
-    d.polygon(ruffle_cover, fill=c["ink"])
-    d.polygon([(x, y) for x, y in ruffle_cover[:-1]], fill=c["dark"])
-    d.line([(bx_tip, by_tip + 2), (bx_tip + 3, by_tip + 3)], fill=c["light"], width=1)
+    d.polygon(lower_out, fill=c["ink"])
+    d.polygon(lower_in, fill=c["beak"])
+    d.polygon(upper, fill=c["ink"])
+    d.polygon(inner, fill=c["beak"])
+    d.point((hx + 13, hy + 2), fill="#c8b8b5")
 
-    # 12. FEATHER DANDER / FLUFFY DOWN
+    # 11. FEATHER DANDER / FLUFFY DOWN (极细小软白羽绒微粒)
     if feather_particle:
-        d.point((bx_tip + 3, by_tip - 8), fill="#ffffff")
-        d.point((bx_tip + 4, by_tip - 9), fill="#ffffff")
-        d.point((bx_tip + 2, by_tip - 9), fill="#eae6da")
-        d.point((bx_tip + 5, by_tip - 8), fill="#e0dcce")
+        d.point((hx + 17, hy + 1), fill="#ffffff")
+        d.point((hx + 18, hy), fill="#ffffff")
+        d.point((hx + 16, hy), fill="#eae6da")
+        d.point((hx + 19, hy + 1), fill="#e0dcce")
 
     return im
 

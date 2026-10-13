@@ -39,7 +39,6 @@ def render_preen_back_frame(phase=0, eye_mode=None):
     if phase == 0:
         # 帧 0: 转头探背，嘴尖刚刚触碰到背部羽毛，大圆眼专注注视
         head_x, head_y = 48, 38
-        beak_reach = 0        # 深入程度
         wing_ruffle = 0       # 翅膀蓬起
         default_eye = "open"  # 睁开大圆眼
         crest_wag = 0         # 冠羽自然顺贴
@@ -47,9 +46,8 @@ def render_preen_back_frame(phase=0, eye_mode=None):
         body_breath = 0
 
     elif phase == 1:
-        # 帧 1: 嘴壳深埋进背羽，头部微下探啄弄，专注注视啄羽处
+        # 帧 1: 头部带动固定嘴壳深埋进背羽，专注注视啄羽处
         head_x, head_y = 50, 40
-        beak_reach = 2
         wing_ruffle = 2       # 翅羽被嘴壳挑起膨起
         default_eye = "open"  # 睁开大圆眼
         crest_wag = 1         # 冠羽随低头微颤
@@ -57,19 +55,17 @@ def render_preen_back_frame(phase=0, eye_mode=None):
         body_breath = 1
 
     elif phase == 2:
-        # 帧 2: 轻轻顺理羽丝，嘴壳微抬，空中浮现一抹极细微白绒毛
-        head_x, head_y = 49, 39
-        beak_reach = 1
-        wing_ruffle = 3       # 翅羽处于挑理最高点
+        # 帧 2: 轻轻顺理羽丝，头部微抬，空中浮现一抹极细微白绒毛
+        head_x, head_y = 49, 38
+        wing_ruffle = 2       # 翅羽顺理
         default_eye = "open"  # 睁开大圆眼 (亦可轻柔微眨)
         crest_wag = 2
         feather_particle = True # 产生一颗小羽屑/绒毛
         body_breath = 1
 
     else:
-        # 帧 3: 啄梳完成一个微循环，嘴壳稍微松开回弹，羽毛落回
+        # 帧 3: 啄梳完成一个微循环，头部回弹，羽毛落回
         head_x, head_y = 47, 37
-        beak_reach = 0
         wing_ruffle = 1
         default_eye = "open"  # 睁开大圆眼
         crest_wag = 0
@@ -179,50 +175,32 @@ def render_preen_back_frame(phase=0, eye_mode=None):
     # 顺羽毛流光线
     d.line([(hx - 1, hy - 11), (hx - 9 - crest_wag, hy - 18 - crest_wag)], fill=c["yellow"], width=1)
 
-    # 10. BEAK (小嘴喙 - 朝外舒展 +3px，清晰从面部前端伸出，尖端自然埋进背后翅羽)
-    bx_base = hx + 9
-    by_base = hy + 4
-    bx_tip = hx + 17 + beak_reach
-    by_tip = hy + 10 + beak_reach
-
-    beak_upper = [
-        (bx_base, by_base - 2),
-        (bx_base + 3, by_base - 1),
-        (bx_tip + 2, by_tip),
-        (bx_tip, by_tip + 3),
-        (bx_base + 1, by_base + 4),
-        (bx_base - 1, by_base + 1)
+    # 10. RIGID BEAK (100% 完全不发生形变的固定小嘴壳 - 严格保持原版几何形状水平镜像)
+    upper = [
+        (hx + 9, hy - 1), (hx + 12, hy - 1), (hx + 14, hy + 1),
+        (hx + 15, hy + 3), (hx + 15, hy + 5), (hx + 13, hy + 7),
+        (hx + 12, hy + 9), (hx + 12, hy + 6), (hx + 9, hy + 3)
     ]
-    beak_inner = [
-        (bx_base + 1, by_base - 1),
-        (bx_base + 3, by_base),
-        (bx_tip + 1, by_tip),
-        (bx_tip, by_tip + 2),
-        (bx_base + 1, by_base + 3)
+    inner = [
+        (hx + 10, hy), (hx + 12, hy), (hx + 14, hy + 2),
+        (hx + 14, hy + 5), (hx + 12, hy + 7), (hx + 12, hy + 6),
+        (hx + 9, hy + 3)
     ]
-    d.polygon(beak_upper, fill=c["ink"])
-    d.polygon(beak_inner, fill=c["beak"])
-    d.point((bx_base + 2, by_base), fill="#c8b8b5")
+    lower_out = [(hx + 10, hy + 5), (hx + 12, hy + 7), (hx + 10, hy + 9), (hx + 8, hy + 7)]
+    lower_in = [(hx + 10, hy + 6), (hx + 11, hy + 7), (hx + 9, hy + 8)]
 
-    # 11. OVERLAPPING BACK FEATHER RUFFLES (覆羽轻盈遮挡尖端，嘴壳立体舒展外露)
-    ruffle_cover = [
-        (bx_tip - 1, by_tip - 2),
-        (bx_tip + 3, by_tip - 1),
-        (bx_tip + 6, by_tip + 4),
-        (bx_tip + 2, by_tip + 6),
-        (bx_tip - 2, by_tip + 2)
-    ]
-    d.polygon(ruffle_cover, fill=c["ink"])
-    d.polygon([(x, y) for x, y in ruffle_cover[:-1]], fill=c["dark"])
-    d.line([(bx_tip, by_tip + 2), (bx_tip + 3, by_tip + 3)], fill=c["light"], width=1)
+    d.polygon(lower_out, fill=c["ink"])
+    d.polygon(lower_in, fill=c["beak"])
+    d.polygon(upper, fill=c["ink"])
+    d.polygon(inner, fill=c["beak"])
+    d.point((hx + 13, hy + 2), fill="#c8b8b5")
 
-    # 12. FEATHER DANDER / FLUFFY DOWN (梳理挑起的极细小白绒毛微粒)
+    # 11. FEATHER DANDER / FLUFFY DOWN (极细小软白羽绒微粒)
     if feather_particle:
-        # 在嘴壳上方轻轻飘起一团轻盈的小绒毛（2~3 像素软白微粒）
-        d.point((bx_tip + 3, by_tip - 8), fill="#ffffff")
-        d.point((bx_tip + 4, by_tip - 9), fill="#ffffff")
-        d.point((bx_tip + 2, by_tip - 9), fill="#eae6da")
-        d.point((bx_tip + 5, by_tip - 8), fill="#e0dcce")
+        d.point((hx + 17, hy + 1), fill="#ffffff")
+        d.point((hx + 18, hy), fill="#ffffff")
+        d.point((hx + 16, hy), fill="#eae6da")
+        d.point((hx + 19, hy + 1), fill="#e0dcce")
 
     return im
 

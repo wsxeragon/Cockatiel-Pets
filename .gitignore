@@ -49,3 +49,4 @@ $RECYCLE.BIN/
 *.log
 scratch/
 tmp/
+test_*/

@@ -24,6 +24,7 @@ class BehaviorType(str, Enum):
     EXCITE_BOB = "EXCITE_BOB"
     EXCITE_HEART_WINGS = "EXCITE_HEART_WINGS"
     EXCITE_SING = "EXCITE_SING"
+    EXCITE_BONK = "EXCITE_BONK"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -60,7 +61,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.IDLE_FLY: BehaviorDef(
         BehaviorType.IDLE_FLY, "日常短途飞行", 7.0, -0.4, 0.1, 0.0, 2.0, 0.4,
-        ["fly_0", "fly_1", "fly_2", "fly_1"], frame_interval_ms=145,
+        ["fly_0", "fly_1", "fly_2", "fly_3"], frame_interval_ms=120,
         is_interruptible=False
     ),
     # 闲置搞事
@@ -83,7 +84,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.COMFORT_APPROACH: BehaviorDef(
         BehaviorType.COMFORT_APPROACH, "飞向光标求陪伴", 1.0, -1.0, 1.1, 0.2, 3.0, 0.5,
-        ["fly_0", "fly_1", "fly_2", "fly_1"], frame_interval_ms=150, is_interruptible=False
+        ["fly_0", "fly_1", "fly_2", "fly_3"], frame_interval_ms=120, is_interruptible=False
     ),
     BehaviorType.REST_SLEEP: BehaviorDef(
         BehaviorType.REST_SLEEP, "安静睡觉", 0.0, 0.0, 0.0, 0.0, 30.0, 0.0,
@@ -95,8 +96,8 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     # 兴奋
     BehaviorType.EXCITE_HOP: BehaviorDef(
-        BehaviorType.EXCITE_HOP, "原地雀跃小跳", 8.0, -0.2, 0.1, 0.6, 300.0, 20.0,
-        ["hop_0", "hop_1", "hop_0"], frame_interval_ms=180
+        BehaviorType.EXCITE_HOP, "移动雀跃小跳", 8.0, -0.2, 0.1, 0.8, 3.2, 0.8,
+        ["hop_0", "hop_1", "hop_2", "hop_3"], frame_interval_ms=130
     ),
     BehaviorType.EXCITE_BOB: BehaviorDef(
         BehaviorType.EXCITE_BOB, "点头打节拍狂魔", 10.0, -0.3, 0.2, 0.9, 60.0, 8.0,
@@ -110,6 +111,10 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         BehaviorType.EXCITE_SING, "吹口哨唱歌独奏", 1.0, -0.6, 0.2, 1.4, 300.0, 20.0,
         ["sing_0", "sing_1", "sing_2", "sing_1"], frame_interval_ms=200
     ),
+    BehaviorType.EXCITE_BONK: BehaviorDef(
+        BehaviorType.EXCITE_BONK, "嘴壳敲屏(自嗨敲打)", 2.5, -0.4, 0.3, 1.2, 3.5, 0.8,
+        ["bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4", "bonk_0"], frame_interval_ms=160
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -117,7 +122,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.FRIGHT_BITE: BehaviorDef(
         BehaviorType.FRIGHT_BITE, "咬鼠标反击", 0.0, 1.0, -0.5, 0.0, 1.0, 0.2,
-        ["bite_0", "bite_1", "idle_0"], frame_interval_ms=180, is_interruptible=False
+        ["bite_0", "bite_1", "bite_2", "bite_3"], frame_interval_ms=180, is_interruptible=False
     ),
     BehaviorType.FRIGHT_HISS: BehaviorDef(
         BehaviorType.FRIGHT_HISS, "炸毛哈气威慑", 1.0, 1.0, -0.5, 0.0, 2.0, 0.5,
@@ -125,7 +130,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.FRIGHT_PANIC_FLY: BehaviorDef(
         BehaviorType.FRIGHT_PANIC_FLY, "惊吓扇翅逃跑", 0.5, 1.5, -0.8, 0.0, 3.0, 0.5,
-        ["fly_0", "fly_1", "fly_2", "fly_1"], frame_interval_ms=120, is_interruptible=False
+        ["fly_0", "fly_1", "fly_2", "fly_3"], frame_interval_ms=95, is_interruptible=False
     ),
 }
 
@@ -135,6 +140,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_BOB,
     BehaviorType.EXCITE_HEART_WINGS,
     BehaviorType.EXCITE_SING,
+    BehaviorType.EXCITE_BONK,
     BehaviorType.MISCHIEF_CHEW,
 }
 
@@ -208,6 +214,7 @@ class MoodDynamics:
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,
                 BehaviorType.EXCITE_SING: 0.0012,
+                BehaviorType.EXCITE_BONK: 0.008,
                 BehaviorType.MISCHIEF_CHEW: 0.10,
                 BehaviorType.COMFORT_APPROACH: 0.35,
                 BehaviorType.FRIGHT_PANIC_FLY: 0.55,

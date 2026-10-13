@@ -90,8 +90,27 @@ class RadarHUD(QWidget):
         self.btn_idle_charge.clicked.connect(self.on_idle_charge_clicked)
         self.btn_force_dance = QPushButton("强制兴奋自嗨")
         self.btn_force_dance.clicked.connect(self.on_force_dance_clicked)
+        self.btn_bonk = QPushButton("🥁 敲击屏幕")
+        self.btn_bonk.setStyleSheet("""
+            QPushButton {
+                background-color: #3e3828;
+                border: 1px solid #f9e2af;
+                color: #f9e2af;
+                font-weight: bold;
+                padding: 6px 8px;
+            }
+            QPushButton:hover {
+                background-color: #554b32;
+                border-color: #fab387;
+            }
+            QPushButton:pressed {
+                background-color: #2b2518;
+            }
+        """)
+        self.btn_bonk.clicked.connect(self.on_bonk_clicked)
         btn_row2.addWidget(self.btn_idle_charge)
         btn_row2.addWidget(self.btn_force_dance)
+        btn_row2.addWidget(self.btn_bonk)
         layout.addLayout(btn_row2)
 
         btn_row3 = QHBoxLayout()
@@ -137,6 +156,49 @@ class RadarHUD(QWidget):
         btn_row3.addWidget(self.btn_clear_fatigue)
         layout.addLayout(btn_row3)
 
+        btn_row4 = QHBoxLayout()
+        self.btn_hop = QPushButton("🦘 雀跃小跳")
+        self.btn_hop.setStyleSheet("""
+            QPushButton {
+                background-color: #263842;
+                border: 1px solid #89dceb;
+                color: #89dceb;
+                font-weight: bold;
+                padding: 6px 8px;
+            }
+            QPushButton:hover {
+                background-color: #334c59;
+                border-color: #a6e3a1;
+            }
+            QPushButton:pressed {
+                background-color: #17242a;
+            }
+        """)
+        self.btn_hop.clicked.connect(self.on_hop_clicked)
+
+        self.btn_fly = QPushButton("🕊️ 舒展飞翔")
+        self.btn_fly.setStyleSheet("""
+            QPushButton {
+                background-color: #2a3447;
+                border: 1px solid #b4befe;
+                color: #b4befe;
+                font-weight: bold;
+                padding: 6px 8px;
+            }
+            QPushButton:hover {
+                background-color: #374259;
+                border-color: #cdd6f4;
+            }
+            QPushButton:pressed {
+                background-color: #1a2233;
+            }
+        """)
+        self.btn_fly.clicked.connect(self.on_fly_clicked)
+
+        btn_row4.addWidget(self.btn_hop)
+        btn_row4.addWidget(self.btn_fly)
+        layout.addLayout(btn_row4)
+
     def on_pet_clicked(self):
         self.pet.handle_pet_head()
 
@@ -153,6 +215,18 @@ class RadarHUD(QWidget):
         self.pet.mood.comfort = 40.0
         self.pet.mood.fright = 0.0
         self.last_event_label.setText("最新事件: 兴奋值拉满至 95")
+
+    def on_bonk_clicked(self):
+        self.pet.trigger_bonk("控制面板注入：靠近屏幕边缘敲嘴壳！")
+        self.last_event_label.setText("最新事件: 敲击屏幕边缘 (Beak Bonking)")
+
+    def on_hop_clicked(self):
+        self.pet.trigger_hop("控制面板注入：欢快移动连环小跳！")
+        self.last_event_label.setText("最新事件: 移动雀跃小跳 (Hop Move)")
+
+    def on_fly_clicked(self):
+        self.pet.start_flight(panic=False, roam=True)
+        self.last_event_label.setText("最新事件: 触发舒展飞翔 (Flight)")
 
     def on_force_sleep_clicked(self):
         self.pet.force_sleep("控制面板注入：疲劳度拉满至 100，直接进入睡眠")

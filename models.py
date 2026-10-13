@@ -57,7 +57,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.IDLE_PECK: BehaviorDef(
         BehaviorType.IDLE_PECK, "啄啄桌面", 15.0, -0.3, 0.0, 0.1, 2.5, 0.8,
-        ["peck_0", "peck_1", "peck_0", "peck_1"], frame_interval_ms=180
+        ["peck_0", "peck_1", "peck_2", "peck_3"], frame_interval_ms=180
     ),
     BehaviorType.IDLE_FLY: BehaviorDef(
         BehaviorType.IDLE_FLY, "日常短途飞行", 7.0, -0.4, 0.1, 0.0, 2.0, 0.4,

@@ -25,6 +25,7 @@ class BehaviorType(str, Enum):
     EXCITE_HEART_WINGS = "EXCITE_HEART_WINGS"
     EXCITE_SING = "EXCITE_SING"
     EXCITE_BONK = "EXCITE_BONK"
+    EXCITE_DOUBLE_PECK = "EXCITE_DOUBLE_PECK"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -56,7 +57,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["waddle_0", "waddle_1", "waddle_2", "waddle_3"], frame_interval_ms=180
     ),
     BehaviorType.IDLE_PECK: BehaviorDef(
-        BehaviorType.IDLE_PECK, "啄啄桌面", 15.0, -0.3, 0.0, 0.1, 2.5, 0.8,
+        BehaviorType.IDLE_PECK, "闲置自然啄食", 15.0, -0.3, 0.0, 0.1, 2.5, 0.8,
         ["peck_0", "peck_1", "peck_2", "peck_3"], frame_interval_ms=180
     ),
     BehaviorType.IDLE_FLY: BehaviorDef(
@@ -115,6 +116,10 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         BehaviorType.EXCITE_BONK, "嘴壳敲屏(自嗨敲打)", 2.5, -0.4, 0.3, 1.2, 3.5, 0.8,
         ["bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4", "bonk_0"], frame_interval_ms=160
     ),
+    BehaviorType.EXCITE_DOUBLE_PECK: BehaviorDef(
+        BehaviorType.EXCITE_DOUBLE_PECK, "连环双击啄桌面", 3.0, -0.4, 0.2, 1.2, 3.2, 0.6,
+        ["peck_0", "peck_1", "peck_2", "peck_1", "peck_2", "peck_3"], frame_interval_ms=140
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -141,6 +146,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_HEART_WINGS,
     BehaviorType.EXCITE_SING,
     BehaviorType.EXCITE_BONK,
+    BehaviorType.EXCITE_DOUBLE_PECK,
     BehaviorType.MISCHIEF_CHEW,
 }
 

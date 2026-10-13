@@ -563,6 +563,7 @@ class CockatielWindow(QWidget):
         act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
         act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
         act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
+        act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
         act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
         act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
@@ -596,6 +597,10 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来啄米")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], None, "右键菜单触发：闲置自然啄食！")
+        elif res == act_preen:
+            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+                self.wake_up("被叫醒起来整理羽毛")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None, "右键菜单触发：转头埋背整理羽毛！")
         elif res == act_fly:
             self.start_flight(panic=False, roam=True)
         elif res == act_fright:

@@ -800,6 +800,195 @@ def render_true_ground_peck_frame(phase=0):
 
     return im
 
+def render_preen_back_frame(phase=0):
+    """Render 100x80 pixel sprite for preening back feathers.
+    phase:
+      0: Turn & Enter (Head turned back 180°, beak touching wing/back)
+      1: Deep Nibble (Head deeper into feathers, wing ruffles slightly)
+      2: Pull & Preen (Beak nibbles feather strand, happy squint, tiny fluffy down particle)
+      3: Relax & Settle (Beak loosens, feathers settle back)
+    """
+    im = Image.new("RGBA", (100, 80))
+    d = ImageDraw.Draw(im)
+    c = C
+
+    if phase == 0:
+        head_x, head_y = 48, 38
+        beak_reach = 0
+        wing_ruffle = 0
+        eye_mode = "cozy"
+        crest_wag = 0
+        feather_particle = False
+        body_breath = 0
+
+    elif phase == 1:
+        head_x, head_y = 50, 40
+        beak_reach = 2
+        wing_ruffle = 2
+        eye_mode = "happy"
+        crest_wag = 1
+        feather_particle = False
+        body_breath = 1
+
+    elif phase == 2:
+        head_x, head_y = 49, 39
+        beak_reach = 1
+        wing_ruffle = 3
+        eye_mode = "happy"
+        crest_wag = 2
+        feather_particle = True
+        body_breath = 1
+
+    else:
+        head_x, head_y = 47, 37
+        beak_reach = 0
+        wing_ruffle = 1
+        eye_mode = "cozy"
+        crest_wag = 0
+        feather_particle = False
+        body_breath = 0
+
+    # 1. TAIL
+    d.polygon([(61, 52), (96, 54), (98, 58), (68, 60), (60, 56)], fill=c["ink"])
+    d.polygon([(63, 53), (95, 55), (92, 57), (67, 57)], fill=c["dark"])
+    d.line([(71, 55), (92, 56)], fill=c["light"])
+
+    # 2. FEET
+    feet = [(45, 41), (57, 54)]
+    for fx, toe in feet:
+        d.line([(fx, 65), (toe, 72)], fill=c["ink"], width=3)
+        d.line([(fx, 65), (toe, 72)], fill=c["foot"], width=2)
+        d.line([(toe - 3, 72), (toe + 2, 72)], fill=c["foot"], width=2)
+
+    # 3. BODY
+    body_x0, body_y0 = 34, 34 - body_breath
+    body_x1, body_y1 = 72, 70
+    d.ellipse((body_x0, body_y0, body_x1, body_y1), fill=c["ink"])
+    d.ellipse((body_x0 + 2, body_y0 + 2, body_x1 - 2, body_y1 - 2), fill=c["grey"])
+    d.ellipse((body_x0 + 4, body_y0 + 10, body_x0 + 22, body_y1 - 4), fill=c["light"])
+
+    # 4. NECK
+    neck_pts = [
+        (body_x0 + 6, body_y0 + 12),
+        (head_x - 10, head_y + 4),
+        (head_x - 6, head_y + 11),
+        (body_x0 + 18, body_y0 + 16),
+        (body_x0 + 12, body_y0 + 22)
+    ]
+    d.polygon(neck_pts, fill=c["ink"])
+    d.polygon([(x + 1, y) for x, y in neck_pts[:-1]], fill=c["grey"])
+
+    # 5. BASE WING
+    base_wing = [
+        (47, 40 - wing_ruffle),
+        (65, 42 - wing_ruffle),
+        (76, 53 + wing_ruffle // 2),
+        (63, 62),
+        (47, 55)
+    ]
+    d.polygon(base_wing, fill=c["ink"])
+    d.polygon([(x + 1, y + 1) for x, y in base_wing[:-1]], fill=c["dark"])
+
+    white_patch = [
+        (49, 47 - wing_ruffle),
+        (55, 48 - wing_ruffle),
+        (63, 54),
+        (73, 54),
+        (66, 61),
+        (56, 59)
+    ]
+    d.polygon(white_patch, fill=c["white"])
+
+    # 6. HEAD
+    hx, hy = head_x, head_y
+    d.ellipse((hx - 13, hy - 13, hx + 13, hy + 13), fill=c["ink"])
+    d.ellipse((hx - 12, hy - 12, hx + 12, hy + 12), fill=c["yellow"])
+    d.polygon([
+        (hx - 12, hy - 6),
+        (hx - 8, hy - 11),
+        (hx - 2, hy - 3),
+        (hx - 6, hy + 8),
+        (hx - 12, hy + 4)
+    ], fill=c["white"])
+
+    # 7. CHEEK
+    d.ellipse((hx + 1, hy + 1, hx + 10, hy + 10), fill=c["cheek"])
+
+    # 8. EYE
+    if eye_mode == "happy":
+        d.line([(hx + 2, hy - 1), (hx + 5, hy - 3), (hx + 8, hy - 1)], fill=c["ink"], width=2)
+        d.point((hx + 6, hy + 4), fill=c["blush"])
+    else:
+        d.line([(hx + 2, hy - 1), (hx + 5, hy), (hx + 8, hy - 1)], fill=c["ink"], width=2)
+
+    # 9. CREST
+    crest_outer = [
+        (hx + 3, hy - 10),
+        (hx - 3, hy - 16),
+        (hx - 11 - crest_wag, hy - 22 - crest_wag),
+        (hx - 15 - crest_wag, hy - 20 - crest_wag),
+        (hx - 8, hy - 13),
+        (hx - 2, hy - 8)
+    ]
+    crest_inner = [
+        (hx + 1, hy - 10),
+        (hx - 3, hy - 15),
+        (hx - 10 - crest_wag, hy - 20 - crest_wag),
+        (hx - 13 - crest_wag, hy - 19 - crest_wag),
+        (hx - 7, hy - 12),
+        (hx - 1, hy - 7)
+    ]
+    d.polygon(crest_outer, fill=c["shade"])
+    d.polygon(crest_inner, fill=c["yellow"])
+    d.line([(hx - 1, hy - 11), (hx - 9 - crest_wag, hy - 18 - crest_wag)], fill=c["yellow"], width=1)
+
+    # 10. BEAK
+    bx_base = hx + 6
+    by_base = hy + 3
+    bx_tip = hx + 12 + beak_reach
+    by_tip = hy + 9 + beak_reach
+
+    beak_upper = [
+        (bx_base, by_base - 2),
+        (bx_base + 3, by_base - 1),
+        (bx_tip + 2, by_tip),
+        (bx_tip, by_tip + 3),
+        (bx_base + 1, by_base + 4),
+        (bx_base - 1, by_base + 1)
+    ]
+    beak_inner = [
+        (bx_base + 1, by_base - 1),
+        (bx_base + 3, by_base),
+        (bx_tip + 1, by_tip),
+        (bx_tip, by_tip + 2),
+        (bx_base + 1, by_base + 3)
+    ]
+    d.polygon(beak_upper, fill=c["ink"])
+    d.polygon(beak_inner, fill=c["beak"])
+    d.point((bx_base + 2, by_base), fill="#c8b8b5")
+
+    # 11. OVERLAPPING BACK FEATHER RUFFLES
+    ruffle_cover = [
+        (bx_tip - 2, by_tip - 3),
+        (bx_tip + 3, by_tip - 1),
+        (bx_tip + 6, by_tip + 4),
+        (bx_tip + 2, by_tip + 6),
+        (bx_tip - 3, by_tip + 1)
+    ]
+    d.polygon(ruffle_cover, fill=c["ink"])
+    d.polygon([(x, y) for x, y in ruffle_cover[:-1]], fill=c["dark"])
+    d.line([(bx_tip - 1, by_tip + 1), (bx_tip + 3, by_tip + 3)], fill=c["light"], width=1)
+    d.point((bx_tip + 1, by_tip - 2), fill=c["white"])
+
+    # 12. FEATHER DANDER / FLUFFY DOWN
+    if feather_particle:
+        d.point((bx_tip + 3, by_tip - 8), fill="#ffffff")
+        d.point((bx_tip + 4, by_tip - 9), fill="#ffffff")
+        d.point((bx_tip + 2, by_tip - 9), fill="#eae6da")
+        d.point((bx_tip + 5, by_tip - 8), fill="#e0dcce")
+
+    return im
+
 def generate_optimized_suite():
     # 1. 走动 (Waddle) - 注入外八字左右重心摇摆与尾巴反向微颤！
     frames = {
@@ -826,9 +1015,11 @@ def generate_optimized_suite():
         "fluff_0": bird_q_optimized(puff=3, eye="closed", crest="low"),
         "fluff_1": bird_q_optimized(puff=5, eye="closed", crest="low", lift=-1),
         
-        # 整理羽毛
-        "preen_0": bird_q_optimized(head=(4, 4), eye="closed"),
-        "preen_1": bird_q_optimized(head=(7, 7), eye="closed"),
+        # 整理羽毛 (转头180°埋进背后羽毛细致啄理)
+        "preen_0": render_preen_back_frame(phase=0),
+        "preen_1": render_preen_back_frame(phase=1),
+        "preen_2": render_preen_back_frame(phase=2),
+        "preen_3": render_preen_back_frame(phase=3),
         
         # 求摸摸 (注入极致享受眯眯笑眼 ^_^)
         "bow_0": bird_q_optimized(head=(-5, 7), eye="closed", crest="low"),
@@ -887,7 +1078,8 @@ def generate_optimized_suite():
         for b_name in [
             "bite_0", "bite_1", "bite_2", "bite_3",
             "fly_0", "fly_1", "fly_2", "fly_3",
-            "peck_0", "peck_1", "peck_2", "peck_3"
+            "peck_0", "peck_1", "peck_2", "peck_3",
+            "preen_0", "preen_1", "preen_2", "preen_3"
         ]:
             if b_name in frames:
                 frames[b_name].save(assets_sprites / f"{b_name}.png")

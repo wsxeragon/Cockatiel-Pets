@@ -5,9 +5,13 @@
 拥有**透明通道无边框置顶窗口**、**四维心态动力学引擎**、**丰富生物习性微表情**与**心理雷达监视器**。
 
 新手练习作品，缺少精美的美术和流畅的动作
-<img width="200" height="160" alt="image" src="https://github.com/user-attachments/assets/d1b16a41-3e00-4765-8bbf-0d3a0a33b00b" />
 <img width="166" height="143" alt="image" src="https://github.com/user-attachments/assets/8a5cd7fd-a008-4ef4-b6cf-9272aeb5ac1f" />
-<img width="231" height="425" alt="image" src="https://github.com/user-attachments/assets/41afd4c4-467f-4104-995e-6319d8b5e13f" />
+<img width="200" height="160" alt="showcase_hop_2x" src="https://github.com/user-attachments/assets/0cee8dc5-604f-49b7-8610-b6cc49ff7842" />
+<img width="200" height="160" alt="showcase_waddle_2x" src="https://github.com/user-attachments/assets/f83ca119-02c1-4e86-963f-760a52d7d535" />
+<img width="200" height="160" alt="showcase_peck_2x" src="https://github.com/user-attachments/assets/a043638a-c24b-4d0d-85c8-8d689d89f1d8" />
+<img width="200" height="160" alt="showcase_sleep_2x" src="https://github.com/user-attachments/assets/fe087442-753e-40a9-a874-cd9da9efb29c" />
+
+
 
 ---
 

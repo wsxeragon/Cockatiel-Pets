@@ -27,6 +27,9 @@ def main():
         "main.py"
     ]
 
+    # 确保没有后台残留的旧进程占用 DLL 文件
+    os.system("taskkill /f /im CockatielPets.exe >nul 2>nul")
+
     dist_folder = os.path.join(dist_root, app_name)
     if os.path.exists(dist_folder):
         shutil.rmtree(dist_folder, ignore_errors=True)

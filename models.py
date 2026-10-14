@@ -329,7 +329,7 @@ class MoodDynamics:
         if self.fright > 0:
             self.fright = max(0.0, self.fright - 2.0 * dt)
 
-    def select_next_behavior(self, current_behavior: BehaviorType = None) -> Tuple[BehaviorDef, float]:
+    def select_next_behavior(self, current_behavior: BehaviorType = None, is_at_edge: bool = False) -> Tuple[BehaviorDef, float]:
         """基于当前四维心态向量通过轮盘赌抽取下一个行为与持续时长"""
         # 如果惊吓值极高，直接强偏置
         weights: List[float] = []
@@ -338,6 +338,9 @@ class MoodDynamics:
         for b_code, b_def in BEHAVIOR_CATALOG.items():
             # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生)
             if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_WAKE):
+                continue
+            # 敲击屏幕 (EXCITE_BONK) 仅在处于屏幕边缘时才允许自发触发
+            if b_code == BehaviorType.EXCITE_BONK and not is_at_edge:
                 continue
             if (b_code in (BehaviorType.COMFORT_APPROACH, BehaviorType.COMFORT_BOW)
                     and not self.can_seek_petting()):

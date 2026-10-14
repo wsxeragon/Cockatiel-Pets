@@ -223,8 +223,11 @@ class RadarHUD(QWidget):
         self.last_event_label.setText("最新事件: 兴奋值拉满至 95")
 
     def on_bonk_clicked(self):
-        self.pet.trigger_bonk("控制面板注入：靠近屏幕边缘敲嘴壳！")
-        self.last_event_label.setText("最新事件: 敲击屏幕边缘 (Beak Bonking)")
+        ok = self.pet.trigger_bonk("控制面板注入：靠近屏幕边缘敲嘴壳！")
+        if ok:
+            self.last_event_label.setText("最新事件: 敲击屏幕边缘 (Beak Bonking)")
+        else:
+            self.last_event_label.setText("最新事件: 敲屏失败 (只在电脑屏幕边缘才触发)")
 
     def on_hop_clicked(self):
         self.pet.trigger_hop("控制面板注入：欢快移动连环小跳！")

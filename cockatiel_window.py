@@ -224,8 +224,23 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update_view()
 
-    def trigger_bonk(self, reason: str = "兴奋自嗨：用嘴壳敲击屏幕！"):
-        """靠拢最近的屏幕边缘并进入嘴壳敲击状态"""
+    def is_at_screen_edge(self, margin: int = 50) -> bool:
+        """判定当前桌宠是否处于屏幕左右边缘（margin 为边缘距离阈值）"""
+        screen = QApplication.primaryScreen().geometry()
+        cur_x = self.x()
+        at_left = cur_x <= margin
+        at_right = cur_x >= (screen.width() - self.width() - margin)
+        return at_left or at_right
+
+    def trigger_bonk(self, reason: str = "兴奋自嗨：用嘴壳敲击屏幕！") -> bool:
+        """在屏幕边缘进入嘴壳敲击状态（只在电脑屏幕边缘才触发）"""
+        if not self.is_at_screen_edge(margin=60):
+            msg = "敲屏只在电脑屏幕边缘才触发！请把小玄凤拖到屏幕边缘，或等它自己溜达过去~"
+            self.last_feedback = msg
+            if self.hud_window:
+                self.hud_window.update_view()
+            return False
+
         if self.current_behavior.code == BehaviorType.REST_SLEEP:
             self.wake_up("被敲屏冲动唤醒！")
         screen = QApplication.primaryScreen().geometry()
@@ -243,6 +258,7 @@ class CockatielWindow(QWidget):
         self.move(new_x, cur_pos.y())
         self.mood.excitement = max(self.mood.excitement, 55.0)
         self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None, reason)
+        return True
     def trigger_hop(self, reason: str = "兴奋雀跃：移动连环小跳！"):
         """触发移动雀跃小跳"""
         if self.current_behavior.code == BehaviorType.REST_SLEEP:
@@ -409,7 +425,8 @@ class CockatielWindow(QWidget):
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0,
                                      "困了，找个安静角落睡觉")
                 return
-            next_b_def, duration = self.mood.select_next_behavior(self.current_behavior.code)
+            is_edge = self.is_at_screen_edge(margin=50)
+            next_b_def, duration = self.mood.select_next_behavior(self.current_behavior.code, is_at_edge=is_edge)
             # 特殊情况: 如果抽取到飞行
             if next_b_def.code == BehaviorType.FRIGHT_PANIC_FLY:
                 self.start_flight(panic=True)
@@ -500,6 +517,9 @@ class CockatielWindow(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.is_dragging = False
+            # 如果处于敲屏状态但被拖拽移离了屏幕边缘，立即切出敲屏
+            if self.current_behavior.code == BehaviorType.EXCITE_BONK and not self.is_at_screen_edge(margin=50):
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "被移离屏幕边缘，停止敲屏发呆~")
 
     def handle_pet_head(self):
         """摸头交互"""

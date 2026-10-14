@@ -14,13 +14,239 @@ OUT_ORIG.mkdir(parents=True, exist_ok=True)
 C = dict(
     ink="#353438", grey="#69696d", light="#88878a", dark="#505055",
     white="#f5f1df", yellow="#fff081", shade="#eacb67", cheek="#e99342",
-    beak="#a99b9a", foot="#bba5a5", blush="#f2826a"
+    beak="#a99b9a", foot="#bba5a5", blush="#f2826a",
+    highlight="#fff9a6", deep_shade="#bd8b2a"
 )
+
+# -------------------------------------------------------------
+# Procedural Recurved Overlapping Crest (反曲状 + 相互重叠三簇羽冠)
+# 严格按照原型图重构：
+# 1. 相互重叠：三簇绝非分离椭圆，而是一个紧密重合的整体羽冠，以暖琥珀羽褶阴影分割。
+# 2. 反曲状：前缘呈反曲内凹弧线，峰顶为 1px 锋芒锐角，后缘三级阶梯递降。
+# -------------------------------------------------------------
+def draw_triple_crest_recurve(d, hx, hy, w1=0.0, w2=0.0, w3=0.0, fan=0.0, lift=0.0):
+    c = C
+    sw3 = w3 + fan * 1.5
+    sw2 = w2 + fan * 0.4
+    sw1 = w1 - fan * 0.8
+    l3 = lift * 0.35
+    l2 = lift * 0.7
+    l1 = lift * 1.0
+
+    # 1. Tier 3 (底层后羽 - 最靠近后脑勺，与头骨融为一体，平静低伏)
+    p3 = [
+        (hx + 1, hy - 10),
+        (hx + 6 + sw3, hy - 13 - l3),
+        (hx + 12 + sw3, hy - 14 - l3), # sharp tip 3 (calm lowered)
+        (hx + 10 + sw3, hy - 12 - l3),
+        (hx + 5, hy - 8)
+    ]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx + 2, hy - 10), (hx + 6 + sw3, hy - 12 - l3), (hx + 11 + sw3, hy - 13 - l3), (hx + 9 + sw3, hy - 11 - l3), (hx + 4, hy - 8)], fill=c["yellow"])
+
+    # 2. Tier 2 (中间层副羽 - 紧密覆压在后羽之上，平静低伏)
+    p2 = [
+        (hx - 2, hy - 11),
+        (hx + 3 + sw2, hy - 16 - l2 * 0.6),
+        (hx + 10 + sw2, hy - 19 - l2), # sharp tip 2 (calm lowered)
+        (hx + 11 + sw2, hy - 18 - l2),
+        (hx + 7 + sw2, hy - 14 - l2 * 0.5),
+        (hx + 2, hy - 10)
+    ]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx - 1, hy - 11), (hx + 3 + sw2, hy - 15 - l2 * 0.6), (hx + 9 + sw2, hy - 18 - l2), (hx + 10 + sw2, hy - 17 - l2), (hx + 6 + sw2, hy - 13 - l2 * 0.5), (hx + 1, hy - 10)], fill=c["yellow"])
+    # 叠层交界处的暖琥珀羽褶阴影线
+    d.line([(hx + 1, hy - 11), (hx + 7 + sw2, hy - 15 - l2 * 0.5)], fill=c["shade"], width=1)
+
+    # 3. Tier 1 (最顶层主长羽 - 前缘饱满拱起反曲微挑，平静高度降低至 hy - 24)
+    p1 = [
+        (hx - 6, hy - 11),                   # 额基
+        (hx - 2 + sw1, hy - 17 - l1 * 0.5),  # 前缘饱满微凸拱起 (反曲方向纠正)
+        (hx + 3 + sw1, hy - 22 - l1 * 0.85), # 顺滑弧线向上后掠
+        (hx + 7 + sw1, hy - 24 - l1),        # 平静梢部尖端 (hy-24，不再过高翘起)
+        (hx + 8 + sw1, hy - 22 - l1),        # 尖锐反曲微挑
+        (hx + 5 + sw1, hy - 17 - l1 * 0.8),  # 与副羽紧密叠合
+        (hx + 2 + sw1, hy - 14 - l1 * 0.5),
+        (hx, hy - 11)
+    ]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 5, hy - 11), (hx - 1 + sw1, hy - 17 - l1 * 0.5), (hx + 3 + sw1, hy - 21 - l1 * 0.85), (hx + 6 + sw1, hy - 23 - l1), (hx + 7 + sw1, hy - 22 - l1), (hx + 4 + sw1, hy - 17 - l1 * 0.8), (hx + 1 + sw1, hy - 14 - l1 * 0.5), (hx - 1, hy - 11)], fill=c["yellow"])
+    # 迎风面象牙金高光
+    d.line([(hx - 5, hy - 11), (hx - 1 + sw1, hy - 17 - l1 * 0.5), (hx + 5 + sw1, hy - 23 - l1)], fill=c["highlight"], width=1)
+    # 主羽与副羽重叠的分界羽褶阴影
+    d.line([(hx, hy - 11), (hx + 4 + sw1, hy - 17 - l1 * 0.8)], fill=c["shade"], width=1)
+
+def draw_triple_crest_low(d, hx, hy):
+    c = C
+    # 三簇顺滑贴背，紧密相互重叠
+    p3 = [(hx + 1, hy - 10), (hx + 6, hy - 13), (hx + 11, hy - 15), (hx + 9, hy - 11), (hx + 4, hy - 9)]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx + 2, hy - 10), (hx + 6, hy - 12), (hx + 10, hy - 14), (hx + 8, hy - 11), (hx + 3, hy - 9)], fill=c["yellow"])
+    
+    p2 = [(hx - 1, hy - 11), (hx + 6, hy - 15), (hx + 14, hy - 14), (hx + 12, hy - 11), (hx + 5, hy - 9)]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx, hy - 11), (hx + 6, hy - 14), (hx + 13, hy - 13), (hx + 11, hy - 11), (hx + 4, hy - 9)], fill=c["yellow"])
+    d.line([(hx + 1, hy - 11), (hx + 10, hy - 13)], fill=c["shade"], width=1)
+
+    p1 = [(hx - 4, hy - 11), (hx + 7, hy - 16), (hx + 18, hy - 13), (hx + 16, hy - 10), (hx + 6, hy - 9)]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 3, hy - 11), (hx + 7, hy - 15), (hx + 17, hy - 12), (hx + 15, hy - 10), (hx + 5, hy - 9)], fill=c["yellow"])
+    d.line([(hx - 2, hy - 11), (hx + 15, hy - 13)], fill=c["highlight"], width=1)
+
+def draw_triple_crest_streamline(d, hx, hy, wave_y=0):
+    c = C
+    p3 = [(hx + 1, hy - 10), (hx + 7, hy - 13 + wave_y), (hx + 14, hy - 13 + wave_y), (hx + 11, hy - 11), (hx + 5, hy - 8)]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx + 2, hy - 10), (hx + 7, hy - 12 + wave_y), (hx + 13, hy - 12 + wave_y), (hx + 10, hy - 11), (hx + 4, hy - 8)], fill=c["yellow"])
+
+    p2 = [(hx - 1, hy - 11), (hx + 7, hy - 16 + wave_y), (hx + 18, hy - 15 + wave_y), (hx + 14, hy - 11), (hx + 4, hy - 9)]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx, hy - 11), (hx + 7, hy - 15 + wave_y), (hx + 17, hy - 14 + wave_y), (hx + 13, hy - 11), (hx + 3, hy - 9)], fill=c["yellow"])
+    d.line([(hx + 1, hy - 11), (hx + 12, hy - 14 + wave_y)], fill=c["shade"], width=1)
+
+    p1 = [(hx - 4, hy - 11), (hx + 8, hy - 18 + wave_y), (hx + 22, hy - 16 + wave_y), (hx + 17, hy - 11), (hx + 5, hy - 9)]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 3, hy - 11), (hx + 8, hy - 17 + wave_y), (hx + 21, hy - 15 + wave_y), (hx + 16, hy - 11), (hx + 4, hy - 9)], fill=c["yellow"])
+    d.line([(hx - 2, hy - 11), (hx + 18, hy - 15 + wave_y)], fill=c["highlight"], width=1)
+
+def draw_triple_crest_preen(d, hx, hy, angle_deg=0.0):
+    """灵动三毛羽冠理毛起伏动态 - 纯刚体轴心旋转 (羽长100%恒定绝对不发生拉伸形变)"""
+    c = C
+    ox, oy = hx, hy - 8 # 颅顶羽根旋转支点
+
+    def rotate_pt(px, py):
+        rad = math.radians(angle_deg)
+        cos_a = math.cos(rad)
+        sin_a = math.sin(rad)
+        dx = px - ox
+        dy = py - oy
+        return (round(ox + dx * cos_a - dy * sin_a), round(oy + dx * sin_a + dy * cos_a))
+
+    # 1. Tier 3 (额基短羽)
+    orig_p3_outer = [(hx - 1, hy - 9), (hx - 5, hy - 13), (hx - 9, hy - 14), (hx - 8, hy - 11), (hx - 3, hy - 8)]
+    orig_p3_inner = [(hx - 1, hy - 9), (hx - 5, hy - 12), (hx - 8, hy - 13), (hx - 7, hy - 11), (hx - 2, hy - 8)]
+    p3_outer = [rotate_pt(x, y) for x, y in orig_p3_outer]
+    p3_inner = [rotate_pt(x, y) for x, y in orig_p3_inner]
+    d.polygon(p3_outer, fill=c["shade"])
+    d.polygon(p3_inner, fill=c["yellow"])
+
+    # 2. Tier 2 (副中羽)
+    orig_p2_outer = [(hx + 1, hy - 10), (hx - 4, hy - 16), (hx - 12, hy - 18), (hx - 10, hy - 15), (hx - 4, hy - 10)]
+    orig_p2_inner = [(hx, hy - 10), (hx - 4, hy - 15), (hx - 11, hy - 17), (hx - 9, hy - 14), (hx - 3, hy - 10)]
+    p2_outer = [rotate_pt(x, y) for x, y in orig_p2_outer]
+    p2_inner = [rotate_pt(x, y) for x, y in orig_p2_inner]
+    d.polygon(p2_outer, fill=c["shade"])
+    d.polygon(p2_inner, fill=c["yellow"])
+    d.line([rotate_pt(hx - 1, hy - 10), rotate_pt(hx - 8, hy - 14)], fill=c["shade"], width=1)
+
+    # 3. Tier 1 (主长羽)
+    orig_p1_outer = [(hx + 3, hy - 10), (hx - 3, hy - 17), (hx - 11, hy - 23), (hx - 15, hy - 21), (hx - 8, hy - 14), (hx - 2, hy - 8)]
+    orig_p1_inner = [(hx + 2, hy - 10), (hx - 3, hy - 16), (hx - 10, hy - 21), (hx - 13, hy - 20), (hx - 7, hy - 13), (hx - 1, hy - 8)]
+    p1_outer = [rotate_pt(x, y) for x, y in orig_p1_outer]
+    p1_inner = [rotate_pt(x, y) for x, y in orig_p1_inner]
+    d.polygon(p1_outer, fill=c["shade"])
+    d.polygon(p1_inner, fill=c["yellow"])
+    d.line([rotate_pt(hx + 1, hy - 10), rotate_pt(hx - 9, hy - 19)], fill=c["highlight"], width=1)
+
+def draw_classic_crest_preen(d, hx, hy, angle_deg=0.0):
+    """经典兔耳羽冠理毛起伏动态 - 纯刚体轴心旋转 (羽长100%恒定绝对不发生拉伸形变)"""
+    c = C
+    ox, oy = hx, hy - 8 # 颅顶羽根旋转支点
+
+    def rotate_pt(px, py):
+        rad = math.radians(angle_deg)
+        cos_a = math.cos(rad)
+        sin_a = math.sin(rad)
+        dx = px - ox
+        dy = py - oy
+        return (round(ox + dx * cos_a - dy * sin_a), round(oy + dx * sin_a + dy * cos_a))
+
+    orig_outer = [
+        (hx + 3, hy - 10),
+        (hx - 3, hy - 16),
+        (hx - 11, hy - 22),
+        (hx - 15, hy - 20),
+        (hx - 8, hy - 13),
+        (hx - 2, hy - 8)
+    ]
+    orig_inner = [
+        (hx + 1, hy - 10),
+        (hx - 3, hy - 15),
+        (hx - 10, hy - 20),
+        (hx - 13, hy - 19),
+        (hx - 7, hy - 12),
+        (hx - 1, hy - 7)
+    ]
+    outer = [rotate_pt(x, y) for x, y in orig_outer]
+    inner = [rotate_pt(x, y) for x, y in orig_inner]
+    d.polygon(outer, fill=c["shade"])
+    d.polygon(inner, fill=c["yellow"])
+    d.line([rotate_pt(hx - 1, hy - 11), rotate_pt(hx - 9, hy - 18)], fill=c["yellow"], width=1)
+
+def draw_triple_crest_peck_aim(d, hx, hy):
+    c = C
+    p3 = [(hx + 2, hy - 10), (hx + 4, hy - 16), (hx + 7, hy - 19), (hx + 5, hy - 17), (hx + 3, hy - 10)]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx + 2, hy - 10), (hx + 4, hy - 15), (hx + 6, hy - 18), (hx + 4, hy - 16), (hx + 3, hy - 10)], fill=c["yellow"])
+
+    p2 = [(hx, hy - 11), (hx + 1, hy - 19), (hx + 4, hy - 24), (hx + 3, hy - 21), (hx + 1, hy - 11)]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx, hy - 11), (hx + 1, hy - 18), (hx + 3, hy - 23), (hx + 2, hy - 20), (hx + 1, hy - 11)], fill=c["yellow"])
+    d.line([(hx + 1, hy - 11), (hx + 2, hy - 18)], fill=c["shade"], width=1)
+
+    p1 = [(hx - 5, hy - 10), (hx - 3, hy - 20), (hx + 1, hy - 27), (hx + 3, hy - 24), (hx - 1, hy - 11)]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 4, hy - 10), (hx - 2, hy - 19), (hx + 1, hy - 25), (hx + 2, hy - 23), (hx - 1, hy - 11)], fill=c["yellow"])
+    d.line([(hx - 4, hy - 10), (hx, hy - 25)], fill=c["highlight"], width=1)
+
+def draw_triple_crest_peck_whip(d, hx, hy):
+    c = C
+    p3 = [(hx - 1, hy - 9), (hx - 4, hy - 14), (hx - 8, hy - 16), (hx - 6, hy - 14), (hx + 1, hy - 9)]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx - 1, hy - 9), (hx - 4, hy - 13), (hx - 7, hy - 15), (hx - 5, hy - 13), (hx + 1, hy - 9)], fill=c["yellow"])
+
+    p2 = [(hx - 3, hy - 10), (hx - 8, hy - 17), (hx - 13, hy - 21), (hx - 10, hy - 18), (hx - 1, hy - 10)]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx - 2, hy - 10), (hx - 7, hy - 16), (hx - 12, hy - 20), (hx - 9, hy - 17), (hx - 1, hy - 10)], fill=c["yellow"])
+    d.line([(hx - 1, hy - 10), (hx - 9, hy - 17)], fill=c["shade"], width=1)
+
+    p1 = [(hx - 5, hy - 9), (hx - 11, hy - 17), (hx - 17, hy - 21), (hx - 14, hy - 26), (hx - 7, hy - 17), (hx + 2, hy - 10)]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 4, hy - 10), (hx - 10, hy - 17), (hx - 15, hy - 21), (hx - 13, hy - 24), (hx - 6, hy - 17), (hx + 1, hy - 11)], fill=c["yellow"])
+    d.line([(hx - 4, hy - 10), (hx - 13, hy - 22)], fill=c["highlight"], width=1)
+
+def draw_triple_crest_peck_lag(d, hx, hy):
+    c = C
+    p3 = [(hx + 3, hy - 9), (hx + 9, hy - 14), (hx + 14, hy - 17), (hx + 11, hy - 14), (hx + 4, hy - 9)]
+    d.polygon(p3, fill=c["shade"])
+    d.polygon([(hx + 3, hy - 9), (hx + 8, hy - 13), (hx + 13, hy - 16), (hx + 10, hy - 13), (hx + 4, hy - 9)], fill=c["yellow"])
+
+    p2 = [(hx + 1, hy - 10), (hx + 6, hy - 18), (hx + 12, hy - 22), (hx + 9, hy - 18), (hx + 3, hy - 10)]
+    d.polygon(p2, fill=c["shade"])
+    d.polygon([(hx + 1, hy - 10), (hx + 5, hy - 17), (hx + 11, hy - 21), (hx + 8, hy - 17), (hx + 2, hy - 10)], fill=c["yellow"])
+    d.line([(hx + 2, hy - 10), (hx + 8, hy - 18)], fill=c["shade"], width=1)
+
+    p1 = [(hx - 5, hy - 10), (hx + 1, hy - 20), (hx + 9, hy - 26), (hx + 12, hy - 22), (hx + 4, hy - 12), (hx + 2, hy - 10)]
+    d.polygon(p1, fill=c["shade"])
+    d.polygon([(hx - 4, hy - 10), (hx + 1, hy - 19), (hx + 8, hy - 25), (hx + 10, hy - 22), (hx + 3, hy - 12), (hx + 1, hy - 11)], fill=c["yellow"])
+    d.line([(hx - 3, hy - 10), (hx + 7, hy - 24)], fill=c["highlight"], width=1)
+
+def draw_triple_crest_bonk_windup(d, hx, hy):
+    draw_triple_crest_recurve(d, hx, hy, w1=-1.0, w2=-0.5, w3=0.2, lift=2.5)
+
+def draw_triple_crest_bonk_lunge(d, hx, hy):
+    draw_triple_crest_streamline(d, hx, hy, wave_y=0)
+
+def draw_triple_crest_bonk_whip(d, hx, hy):
+    draw_triple_crest_peck_whip(d, hx, hy)
+
+def draw_triple_crest_bonk_recoil(d, hx, hy):
+    draw_triple_crest_recurve(d, hx, hy, w1=1.5, w2=0.8, w3=-0.3, lift=2.0)
 
 def bird_q_optimized(
     head=(0, 0), lift=0, step=0, wing="fold", puff=0, eye="open",
     crest="normal", mouth="closed", crumbs=False, note=0,
-    body_roll=0, tail_wag=0, tuck_feet=False
+    body_roll=0, tail_wag=0, tuck_feet=False, crest_style="triple"
 ):
     im = Image.new("RGBA", (100, 80))
     d = ImageDraw.Draw(im)
@@ -84,11 +310,7 @@ def bird_q_optimized(
     d.ellipse((body_x0, body_y0, body_x1, body_y1), fill=c["ink"])
     d.ellipse((body_x0 + 2, body_y0 + 2, body_x1 - 2, body_y1 - 2), fill=c["grey"])
     d.ellipse((body_x0 + 4, body_y0 + 7, body_x0 + 23, body_y1 - 5), fill=c["light"])
-    
-    # 呼吸蓬毛绒毛微粒
-    if puff:
-        for px, py in [(35, 48), (34, 56), (39, 64), (70, 42)]:
-            d.rectangle((px - 2 + bx_off, py + lift, px + 1 + bx_off, py + lift + 2), fill=c["light"])
+    # 呼吸蓬毛效果由主体双层嵌套膨胀椭圆平滑呈现，移除遗留的固定坐标硬边绒毛矩形（曾导致 (34, 56) 与 (39, 64) 冲破身体墨边轮廓向外凸出两个异物方块）
 
     # 5. NEAR WING (近侧翅膀)
     if wing.startswith("fly"):
@@ -160,23 +382,38 @@ def bird_q_optimized(
     # 招牌大腮红
     d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
 
-    # 7. CREST (呆毛/冠羽 - 情绪风向标)
-    if crest == "low":
-        # 顺滑贴向后脑 (求摸/生气)
-        d.polygon([(hx - 4, hy - 11), (hx + 8, hy - 15), (hx + 17, hy - 13), (hx + 5, hy - 9)], fill=c["shade"])
-        d.line([(hx - 2, hy - 12), (hx + 16, hy - 14)], fill=c["yellow"], width=3)
-    elif crest == "alert":
-        # 笔直高耸炸毛 (警觉/受惊)
-        d.polygon([(hx - 5, hy - 10), (hx - 1, hy - 28), (hx + 2, hy - 30), (hx + 3, hy - 11)], fill=c["shade"])
-        d.polygon([(hx, hy - 11), (hx + 7, hy - 25), (hx + 9, hy - 24), (hx + 4, hy - 9)], fill=c["yellow"])
-    elif crest == "breath":
-        # 呼吸微颤 (稍微弹起1像素)
-        d.polygon([(hx - 6, hy - 11), (hx + 1, hy - 22), (hx + 14, hy - 27), (hx + 12, hy - 20), (hx + 3, hy - 10)], fill=c["shade"])
-        d.polygon([(hx - 4, hy - 12), (hx + 2, hy - 21), (hx + 13, hy - 26), (hx + 10, hy - 21), (hx + 1, hy - 11)], fill=c["yellow"])
-    else:
-        # 自然软萌微弯
-        d.polygon([(hx - 7, hy - 11), (hx + 1, hy - 21), (hx + 14, hy - 26), (hx + 12, hy - 19), (hx + 3, hy - 10)], fill=c["shade"])
-        d.polygon([(hx - 5, hy - 12), (hx + 2, hy - 20), (hx + 13, hy - 25), (hx + 10, hy - 20), (hx + 1, hy - 11)], fill=c["yellow"])
+    # 7. CREST (可配置: 经典兔耳 vs 灵动三毛)
+    if crest_style == "classic":
+        if crest in ("low", "hop_leap", "streamline"):
+            # 顺滑贴向后脑 (求摸/生气/腾空前跃风阻贴背)
+            d.polygon([(hx - 4, hy - 11), (hx + 8, hy - 15), (hx + 17, hy - 13), (hx + 5, hy - 9)], fill=c["shade"])
+            d.line([(hx - 2, hy - 12), (hx + 16, hy - 14)], fill=c["yellow"], width=3)
+        elif crest == "alert":
+            # 笔直高耸炸毛 (警觉/受惊/起立蓄力)
+            d.polygon([(hx - 5, hy - 10), (hx - 1, hy - 28), (hx + 2, hy - 30), (hx + 3, hy - 11)], fill=c["shade"])
+            d.polygon([(hx, hy - 11), (hx + 7, hy - 25), (hx + 9, hy - 24), (hx + 4, hy - 9)], fill=c["yellow"])
+        elif crest == "breath":
+            # 呼吸微颤 (稍微弹起1像素)
+            d.polygon([(hx - 6, hy - 11), (hx + 1, hy - 22), (hx + 14, hy - 27), (hx + 12, hy - 20), (hx + 3, hy - 10)], fill=c["shade"])
+            d.polygon([(hx - 4, hy - 12), (hx + 2, hy - 21), (hx + 13, hy - 26), (hx + 10, hy - 21), (hx + 1, hy - 11)], fill=c["yellow"])
+        else:
+            # 自然软萌微弯 (包括 normal)
+            d.polygon([(hx - 7, hy - 11), (hx + 1, hy - 21), (hx + 14, hy - 26), (hx + 12, hy - 19), (hx + 3, hy - 10)], fill=c["shade"])
+            d.polygon([(hx - 5, hy - 12), (hx + 2, hy - 20), (hx + 13, hy - 25), (hx + 10, hy - 20), (hx + 1, hy - 11)], fill=c["yellow"])
+    else: # triple
+        if crest in ("low", "hop_leap"):
+            # 顺滑贴背 / 腾空风阻后掠
+            draw_triple_crest_low(d, hx, hy)
+        elif crest == "streamline":
+            draw_triple_crest_streamline(d, hx, hy, wave_y=0)
+        elif crest == "alert":
+            # 笔直挺拔高耸
+            draw_triple_crest_recurve(d, hx, hy, w1=-1.8, w2=-1.0, w3=0.3, lift=3.5)
+        elif crest == "breath":
+            draw_triple_crest_recurve(d, hx, hy, w1=-1.0, w2=-0.5, w3=0.2, lift=1.0)
+        else:
+            # 自然平静微弯 (包括 normal)
+            draw_triple_crest_recurve(d, hx, hy, w1=0.0, w2=0.0, w3=0.0, fan=0.0, lift=0.0)
 
     # 8. EYES (表情眼神)
     if eye == "open":
@@ -239,7 +476,7 @@ def bird_q_optimized(
             
     return im
 
-def sleeping_bird_q_optimized(puff=0, head=0, zzz=0):
+def sleeping_bird_q_optimized(puff=0, head=0, zzz=0, crest_style="triple"):
     """母鸡蹲/农民揣 熟睡团子 (收脚进肚皮，身体压扁软糖)"""
     im = Image.new("RGBA", (100, 80))
     d = ImageDraw.Draw(im)
@@ -268,9 +505,12 @@ def sleeping_bird_q_optimized(puff=0, head=0, zzz=0):
     d.polygon([(hx + 6, hy - 9), (hx + 12, hy - 5), (hx + 13, hy + 9), (hx + 6, hy + 12)], fill=c["white"])
     d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
     
-    # 顺滑贴背的呆毛
-    d.polygon([(hx - 6, hy - 11), (hx + 7, hy - 15), (hx + 18, hy - 10), (hx + 7, hy - 8)], fill=c["shade"])
-    d.line([(hx - 4, hy - 12), (hx + 17, hy - 11)], fill=c["yellow"], width=3)
+    # 顺滑贴背的呆毛 (可配置: 经典兔耳 vs 灵动三毛)
+    if crest_style == "classic":
+        d.polygon([(hx - 6, hy - 11), (hx + 7, hy - 15), (hx + 18, hy - 10), (hx + 7, hy - 8)], fill=c["shade"])
+        d.line([(hx - 4, hy - 12), (hx + 17, hy - 11)], fill=c["yellow"], width=3)
+    else:
+        draw_triple_crest_low(d, hx, hy)
     
     # 闭眼沉睡线
     d.line([(hx - 9, hy - 2), (hx - 6, hy - 1), (hx - 3, hy - 2)], fill=c["ink"], width=2)
@@ -389,7 +629,7 @@ def render_bird_flight_custom(
     lift=-6,
     head=(-2, -1),
     tail_angle=0,
-    crest_style="streamline",
+    crest_style="triple",
     eye="wide"
 ):
     """Render a dedicated 100x80 aerodynamic flight frame with organic wing mechanics."""
@@ -473,9 +713,9 @@ def render_bird_flight_custom(
     d.polygon([(hx + 6, hy - 9), (hx + 12, hy - 5), (hx + 13, hy + 9), (hx + 6, hy + 12)], fill=c["white"])
     d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
 
-    # 7. CREST (羽冠 - 顺风流线型后掠，速度感十足)
-    if crest_style == "streamline":
-        wave_y = 1 if wing_phase in (1, 2) else 0
+    # 7. CREST (羽冠 - 顺风流线型后掠，可配置: 经典兔耳 vs 灵动三毛)
+    wave_y = 1 if wing_phase in (1, 2) else 0
+    if crest_style == "classic":
         crest_outer = [
             (hx - 4, hy - 11),
             (hx + 8, hy - 18 + wave_y),
@@ -492,9 +732,8 @@ def render_bird_flight_custom(
         ]
         d.polygon(crest_outer, fill=c["shade"])
         d.polygon(crest_inner, fill=c["yellow"])
-    else:
-        d.polygon([(hx - 5, hy - 10), (hx - 1, hy - 28), (hx + 2, hy - 30), (hx + 3, hy - 11)], fill=c["shade"])
-        d.polygon([(hx, hy - 11), (hx + 7, hy - 25), (hx + 9, hy - 24), (hx + 4, hy - 9)], fill=c["yellow"])
+    else: # triple
+        draw_triple_crest_streamline(d, hx, hy, wave_y)
 
     # 8. EYES
     d.ellipse((hx - 9, hy - 7, hx - 3, hy + 1), fill=c["ink"])
@@ -518,7 +757,7 @@ def render_bird_flight_custom(
 
     return im
 
-def render_true_ground_peck_frame(phase=0):
+def render_true_ground_peck_frame(phase=0, crest_style="triple"):
     """Render a dedicated 100x80 frame where the bird realistically pecks the ground.
     Ground baseline is at y = 72.
     phase:
@@ -646,78 +885,87 @@ def render_true_ground_peck_frame(phase=0):
     # 招牌橘色大腮红
     d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
 
-    # 7. CREST INERTIA (羽冠惯性动力学)
-    if crest_mode == "peck_impact_whip":
-        # 撞地瞬间！急停导致羽冠受前冲惯性大甩鞭！向前弧形弯卷
-        crest_poly_outer = [
-            (hx - 5, hy - 9),
-            (hx - 11, hy - 17),
-            (hx - 16, hy - 20),
-            (hx - 13, hy - 25),
-            (hx - 7, hy - 17),
-            (hx + 2, hy - 10)
-        ]
-        crest_poly_inner = [
-            (hx - 4, hy - 10),
-            (hx - 10, hy - 17),
-            (hx - 14, hy - 20),
-            (hx - 12, hy - 24),
-            (hx - 6, hy - 17),
-            (hx + 1, hy - 11)
-        ]
-    elif crest_mode == "peck_rebound_lag":
-        # 反弹微抬时：惯性向下向后滞后拉扯
-        crest_poly_outer = [
-            (hx - 6, hy - 10),
-            (hx, hy - 20),
-            (hx + 9, hy - 26),
-            (hx + 12, hy - 22),
-            (hx + 4, hy - 12),
-            (hx + 2, hy - 10)
-        ]
-        crest_poly_inner = [
-            (hx - 4, hy - 11),
-            (hx + 1, hy - 19),
-            (hx + 8, hy - 25),
-            (hx + 10, hy - 22),
-            (hx + 3, hy - 12),
-            (hx + 1, hy - 11)
-        ]
-    elif crest_mode == "peck_aim":
-        # 瞄准准备：轻微下探，微弓弧线
-        crest_poly_outer = [
-            (hx - 5, hy - 10),
-            (hx - 3, hy - 24),
-            (hx + 1, hy - 28),
-            (hx + 3, hy - 24),
-            (hx + 3, hy - 11)
-        ]
-        crest_poly_inner = [
-            (hx - 3, hy - 11),
-            (hx - 1, hy - 23),
-            (hx + 2, hy - 26),
-            (hx + 2, hy - 22),
-            (hx + 2, hy - 10)
-        ]
-    else: # peck_recover_settle
-        # 恢复站立：自然微弯软萌回弹
-        crest_poly_outer = [
-            (hx - 7, hy - 11),
-            (hx + 1, hy - 21),
-            (hx + 14, hy - 26),
-            (hx + 12, hy - 19),
-            (hx + 3, hy - 10)
-        ]
-        crest_poly_inner = [
-            (hx - 5, hy - 12),
-            (hx + 2, hy - 20),
-            (hx + 13, hy - 25),
-            (hx + 10, hy - 20),
-            (hx + 1, hy - 11)
-        ]
-
-    d.polygon(crest_poly_outer, fill=c["shade"])
-    d.polygon(crest_poly_inner, fill=c["yellow"])
+    # 7. CREST INERTIA (羽冠惯性动力学 - 可配置: 经典兔耳 vs 灵动三毛)
+    if crest_style == "classic":
+        if crest_mode == "peck_impact_whip":
+            # 撞地瞬间！急停导致羽冠受前冲惯性大甩鞭！向前弧形弯卷
+            crest_poly_outer = [
+                (hx - 5, hy - 9),
+                (hx - 11, hy - 17),
+                (hx - 16, hy - 20),
+                (hx - 13, hy - 25),
+                (hx - 7, hy - 17),
+                (hx + 2, hy - 10)
+            ]
+            crest_poly_inner = [
+                (hx - 4, hy - 10),
+                (hx - 10, hy - 17),
+                (hx - 14, hy - 20),
+                (hx - 12, hy - 24),
+                (hx - 6, hy - 17),
+                (hx + 1, hy - 11)
+            ]
+        elif crest_mode == "peck_rebound_lag":
+            # 反弹微抬时：惯性向下向后滞后拉扯
+            crest_poly_outer = [
+                (hx - 6, hy - 10),
+                (hx, hy - 20),
+                (hx + 9, hy - 26),
+                (hx + 12, hy - 22),
+                (hx + 4, hy - 12),
+                (hx + 2, hy - 10)
+            ]
+            crest_poly_inner = [
+                (hx - 4, hy - 11),
+                (hx + 1, hy - 19),
+                (hx + 8, hy - 25),
+                (hx + 10, hy - 22),
+                (hx + 3, hy - 12),
+                (hx + 1, hy - 11)
+            ]
+        elif crest_mode == "peck_aim":
+            # 瞄准准备：轻微下探，微弓弧线
+            crest_poly_outer = [
+                (hx - 5, hy - 10),
+                (hx - 3, hy - 24),
+                (hx + 1, hy - 28),
+                (hx + 3, hy - 24),
+                (hx + 3, hy - 11)
+            ]
+            crest_poly_inner = [
+                (hx - 3, hy - 11),
+                (hx - 1, hy - 23),
+                (hx + 2, hy - 26),
+                (hx + 2, hy - 22),
+                (hx + 2, hy - 10)
+            ]
+        else: # peck_recover_settle
+            # 恢复站立：自然微弯软萌回弹
+            crest_poly_outer = [
+                (hx - 7, hy - 11),
+                (hx + 1, hy - 21),
+                (hx + 14, hy - 26),
+                (hx + 12, hy - 19),
+                (hx + 3, hy - 10)
+            ]
+            crest_poly_inner = [
+                (hx - 5, hy - 12),
+                (hx + 2, hy - 20),
+                (hx + 13, hy - 25),
+                (hx + 10, hy - 20),
+                (hx + 1, hy - 11)
+            ]
+        d.polygon(crest_poly_outer, fill=c["shade"])
+        d.polygon(crest_poly_inner, fill=c["yellow"])
+    else: # triple
+        if crest_mode == "peck_impact_whip":
+            draw_triple_crest_peck_whip(d, hx, hy)
+        elif crest_mode == "peck_rebound_lag":
+            draw_triple_crest_peck_lag(d, hx, hy)
+        elif crest_mode == "peck_aim":
+            draw_triple_crest_peck_aim(d, hx, hy)
+        else: # peck_recover_settle
+            draw_triple_crest_recurve(d, hx, hy)
 
     # 8. EYES (眼神视线聚焦于桌面小石子/谷粒)
     if eye_look == "down":
@@ -784,9 +1032,44 @@ def render_true_ground_peck_frame(phase=0):
         d.point((tip_pt[0] - 3, tip_pt[1]), fill="#ffffff")
         d.point((tip_pt[0] + 4, tip_pt[1]), fill="#ff9800")
 
+    # 11. GROUND GRAIN PARTICLES (地面金黄小米颗粒进食剧情: 方案A 经典金黄小米堆)
+    def draw_single_millet(gx, gy, hl=False):
+        d.point((gx, gy + 1), fill="#c67c00")      # 底部阴影
+        d.point((gx + 1, gy + 1), fill="#b36200")  # 底部深暗角
+        d.point((gx, gy), fill="#ffea75" if hl else "#ffd54f") # 浅金反光
+        d.point((gx + 1, gy), fill="#ffa000")      # 暖金颗粒
+
+    if phase == 0:
+        # Phase 0: 瞄准准备，地面散落 4 粒金黄小米与细屑
+        draw_single_millet(12, 68) # 目标小米 A (正对嘴喙俯探落点)
+        draw_single_millet(7, 70)  # 旁侧小米 B
+        draw_single_millet(17, 69) # 旁侧小米 C
+        d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
+        d.point((15, 71), fill="#ffa000") # 细微谷屑
+    elif phase == 1:
+        # Phase 1: 触地啄击，喙尖正中目标小米 A，邻近谷粒受冲击微跳 1px
+        draw_single_millet(12, 67, hl=True) # 目标小米受压高光
+        draw_single_millet(6, 69)  # 谷粒 B 受震动微跳
+        draw_single_millet(18, 69) # 谷粒 C 微震
+        d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
+        d.point((10, 66), fill="#fff59d") # 冲击微粒
+        d.point((15, 68), fill="#ffa000")
+    elif phase == 2:
+        # Phase 2: 触地回弹，目标小米已叼入口中，地面留下剩余 3 粒谷物与碎屑
+        draw_single_millet(7, 70)  # 谷粒 B 回落平稳
+        draw_single_millet(17, 70) # 谷粒 C 回落平稳
+        d.point((22, 71), fill="#ffd54f") # 小谷粒 D
+        d.point((13, 71), fill="#c67c00") # 目标小米被叼走后遗留的微粒碎屑
+    else: # phase == 3
+        # Phase 3: 顺势抬头惬意咀嚼，地面余粮安静等待下一次啄食
+        draw_single_millet(7, 70)
+        draw_single_millet(17, 70)
+        d.point((22, 71), fill="#ffd54f")
+        d.point((13, 71), fill="#c67c00")
+
     return im
 
-def render_bonk_screen_frame(frame_idx=0):
+def render_bonk_screen_frame(frame_idx=0, crest_style="triple"):
     """Render 100x80 frame for Screen Bonking with dynamic crest inertia.
     frame_idx:
       0: 蓄力后仰 (Anticipation / Pullback): 头部后拉，羽冠受惯性保持前方微弓弧度
@@ -921,83 +1204,94 @@ def render_bonk_screen_frame(frame_idx=0):
     d.polygon([(hx + 6, hy - 9), (hx + 12, hy - 5), (hx + 13, hy + 9), (hx + 6, hy + 12)], fill=c["white"])
     d.ellipse((hx - 3, hy + 1, hx + 8, hy + 11), fill=c["cheek"])
 
-    # 7. CREST INERTIA (敲击屏幕惯性羽冠)
-    if crest_mode == "bonk_impact_whip":
-        crest_outer = [
-            (hx - 5, hy - 9),
-            (hx - 12, hy - 16),
-            (hx - 18, hy - 18),
-            (hx - 15, hy - 23),
-            (hx - 7, hy - 16),
-            (hx + 2, hy - 10)
-        ]
-        crest_inner = [
-            (hx - 4, hy - 10),
-            (hx - 11, hy - 16),
-            (hx - 16, hy - 18),
-            (hx - 14, hy - 22),
-            (hx - 6, hy - 16),
-            (hx + 1, hy - 11)
-        ]
-    elif crest_mode == "bonk_lunge_wind":
-        crest_outer = [
-            (hx - 4, hy - 11),
-            (hx + 8, hy - 19),
-            (hx + 21, hy - 16),
-            (hx + 18, hy - 11),
-            (hx + 4, hy - 9)
-        ]
-        crest_inner = [
-            (hx - 2, hy - 12),
-            (hx + 7, hy - 18),
-            (hx + 20, hy - 15),
-            (hx + 16, hy - 12),
-            (hx + 3, hy - 10)
-        ]
-    elif crest_mode == "bonk_recoil_snap":
-        crest_outer = [
-            (hx - 6, hy - 10),
-            (hx - 2, hy - 24),
-            (hx + 6, hy - 28),
-            (hx + 4, hy - 22),
-            (hx + 3, hy - 10)
-        ]
-        crest_inner = [
-            (hx - 4, hy - 11),
-            (hx - 1, hy - 23),
-            (hx + 5, hy - 27),
-            (hx + 3, hy - 22),
-            (hx + 1, hy - 10)
-        ]
-    elif crest_mode == "bonk_windup":
-        crest_outer = [
-            (hx - 5, hy - 10),
-            (hx - 2, hy - 26),
-            (hx + 2, hy - 28),
-            (hx + 3, hy - 11)
-        ]
-        crest_inner = [
-            (hx - 1, hy - 11),
-            (hx + 3, hy - 24),
-            (hx + 5, hy - 23),
-            (hx + 3, hy - 9)
-        ]
-    else: # bonk_settle_proud
-        crest_outer = [
-            (hx - 5, hy - 10),
-            (hx - 1, hy - 28),
-            (hx + 2, hy - 30),
-            (hx + 3, hy - 11)
-        ]
-        crest_inner = [
-            (hx, hy - 11),
-            (hx + 7, hy - 25),
-            (hx + 9, hy - 24),
-            (hx + 4, hy - 9)
-        ]
-
-    d.polygon(crest_outer, fill=c["shade"])
-    d.polygon(crest_inner, fill=c["yellow"])
+    # 7. CREST INERTIA (敲击屏幕惯性羽冠 - 可配置: 经典兔耳 vs 灵动三毛)
+    if crest_style == "classic":
+        if crest_mode == "bonk_impact_whip":
+            crest_outer = [
+                (hx - 5, hy - 9),
+                (hx - 12, hy - 16),
+                (hx - 18, hy - 18),
+                (hx - 15, hy - 23),
+                (hx - 7, hy - 16),
+                (hx + 2, hy - 10)
+            ]
+            crest_inner = [
+                (hx - 4, hy - 10),
+                (hx - 11, hy - 16),
+                (hx - 16, hy - 18),
+                (hx - 14, hy - 22),
+                (hx - 6, hy - 16),
+                (hx + 1, hy - 11)
+            ]
+        elif crest_mode == "bonk_lunge_wind":
+            crest_outer = [
+                (hx - 4, hy - 11),
+                (hx + 8, hy - 19),
+                (hx + 21, hy - 16),
+                (hx + 18, hy - 11),
+                (hx + 4, hy - 9)
+            ]
+            crest_inner = [
+                (hx - 2, hy - 12),
+                (hx + 7, hy - 18),
+                (hx + 20, hy - 15),
+                (hx + 16, hy - 12),
+                (hx + 3, hy - 10)
+            ]
+        elif crest_mode == "bonk_recoil_snap":
+            crest_outer = [
+                (hx - 6, hy - 10),
+                (hx - 2, hy - 24),
+                (hx + 6, hy - 28),
+                (hx + 4, hy - 22),
+                (hx + 3, hy - 10)
+            ]
+            crest_inner = [
+                (hx - 4, hy - 11),
+                (hx - 1, hy - 23),
+                (hx + 5, hy - 27),
+                (hx + 3, hy - 22),
+                (hx + 1, hy - 10)
+            ]
+        elif crest_mode == "bonk_windup":
+            crest_outer = [
+                (hx - 5, hy - 10),
+                (hx - 2, hy - 26),
+                (hx + 2, hy - 28),
+                (hx + 3, hy - 11)
+            ]
+            crest_inner = [
+                (hx - 1, hy - 11),
+                (hx + 3, hy - 24),
+                (hx + 5, hy - 23),
+                (hx + 3, hy - 9)
+            ]
+        else: # bonk_settle_proud
+            crest_outer = [
+                (hx - 5, hy - 10),
+                (hx - 1, hy - 28),
+                (hx + 2, hy - 30),
+                (hx + 3, hy - 11)
+            ]
+            crest_inner = [
+                (hx, hy - 11),
+                (hx + 7, hy - 25),
+                (hx + 9, hy - 24),
+                (hx + 4, hy - 9)
+            ]
+        d.polygon(crest_outer, fill=c["shade"])
+        d.polygon(crest_inner, fill=c["yellow"])
+    else: # triple
+        if crest_mode == "bonk_impact_whip":
+            draw_triple_crest_bonk_whip(d, hx, hy)
+        elif crest_mode == "bonk_lunge_wind":
+            draw_triple_crest_bonk_lunge(d, hx, hy)
+        elif crest_mode == "bonk_recoil_snap":
+            draw_triple_crest_bonk_recoil(d, hx, hy)
+        elif crest_mode == "bonk_windup":
+            draw_triple_crest_bonk_windup(d, hx, hy)
+        else: # bonk_settle_proud
+            draw_triple_crest_recurve(d, hx, hy, w1=-1.8, w2=-1.0, w3=0.3, lift=3.5)
 
     # 8. EYES
     if eye == "open":
@@ -1037,7 +1331,7 @@ def render_bonk_screen_frame(frame_idx=0):
 
     return im
 
-def render_preen_back_frame(phase=0):
+def render_preen_back_frame(phase=0, crest_style="triple"):
     """Render 100x80 pixel sprite for preening back feathers.
     phase:
       0: Turn & Enter (Head turned back 180°, beak touching wing/back)
@@ -1157,26 +1451,18 @@ def render_preen_back_frame(phase=0):
         # 水润纯白高光点
         d.point((hx + 4, hy - 5), fill=c["white"])
 
-    # 9. CREST
-    crest_outer = [
-        (hx + 3, hy - 10),
-        (hx - 3, hy - 16),
-        (hx - 11 - crest_wag, hy - 22 - crest_wag),
-        (hx - 15 - crest_wag, hy - 20 - crest_wag),
-        (hx - 8, hy - 13),
-        (hx - 2, hy - 8)
-    ]
-    crest_inner = [
-        (hx + 1, hy - 10),
-        (hx - 3, hy - 15),
-        (hx - 10 - crest_wag, hy - 20 - crest_wag),
-        (hx - 13 - crest_wag, hy - 19 - crest_wag),
-        (hx - 7, hy - 12),
-        (hx - 1, hy - 7)
-    ]
-    d.polygon(crest_outer, fill=c["shade"])
-    d.polygon(crest_inner, fill=c["yellow"])
-    d.line([(hx - 1, hy - 11), (hx - 9 - crest_wag, hy - 18 - crest_wag)], fill=c["yellow"], width=1)
+    # 9. CREST UNDULATION (理毛羽冠匀速小摆幅起伏: 纯刚体轴心严格匀速摆动，每帧绝对角位移严格恒定为 6°，绝对匀速不加速，羽长100%恒定守恒)
+    # Phase 0: 探头就位 (angle = 0.0°)
+    # Phase 1: 深入啄理，头部下潜，羽冠匀速微幅向下贴枕 (angle = -6.0°)
+    # Phase 2: 挑羽回升，羽冠匀速回正 (angle = 0.0°)
+    # Phase 3: 舒缓微扬，羽冠匀速微幅上扬 (angle = +6.0°)
+    preen_angles = [0.0, -6.0, 0.0, 6.0]
+    crest_ang = preen_angles[phase]
+
+    if crest_style == "classic":
+        draw_classic_crest_preen(d, hx, hy, angle_deg=crest_ang)
+    else: # triple
+        draw_triple_crest_preen(d, hx, hy, angle_deg=crest_ang)
 
     # 10. RIGID BEAK (100% 完全不发生形变的固定小嘴壳 - 严格保持原版几何形状水平镜像)
     upper = [
@@ -1207,111 +1493,125 @@ def render_preen_back_frame(phase=0):
 
     return im
 
-def generate_optimized_suite():
-    # 1. 走动 (Waddle) - 注入外八字左右重心摇摆与尾巴反向微颤！
-    frames = {
+def build_suite_frames(crest_style="triple"):
+    """Build all 50 procedural animation frames using the specified crest_style ('classic' or 'triple')."""
+    return {
         # 呼吸发呆
-        "idle_0": bird_q_optimized(),
-        "idle_1": bird_q_optimized(eye="closed"),
-        "idle_2": bird_q_optimized(puff=1, head=(0, -1), crest="breath"), # 呼吸微起伏
+        "idle_0": bird_q_optimized(crest_style=crest_style),
+        "idle_1": bird_q_optimized(eye="closed", crest_style=crest_style),
+        "idle_2": bird_q_optimized(puff=1, head=(0, -1), crest="breath", crest_style=crest_style),
         
         # 左右摇摆外八字鸭子步
-        "waddle_0": bird_q_optimized(),
-        "waddle_1": bird_q_optimized(step=1, head=(-2, 0), body_roll=-1, tail_wag=2), # 向左摇摆迈步
-        "waddle_2": bird_q_optimized(),
-        "waddle_3": bird_q_optimized(step=2, head=(1, 1), body_roll=1, tail_wag=-2),   # 向右摇摆迈步
+        "waddle_0": bird_q_optimized(crest_style=crest_style),
+        "waddle_1": bird_q_optimized(step=1, head=(-2, 0), body_roll=-1, tail_wag=2, crest_style=crest_style),
+        "waddle_2": bird_q_optimized(crest_style=crest_style),
+        "waddle_3": bird_q_optimized(step=2, head=(1, 1), body_roll=1, tail_wag=-2, crest_style=crest_style),
         
         # 真实触地啄桌面与嚼食 (深潜触地 y=71、翘臀杠杆、反冲咀嚼)
-        "peck_0": render_true_ground_peck_frame(phase=0), # 瞄准准备
-        "peck_1": render_true_ground_peck_frame(phase=1), # 真实触地击打 (y=71)
-        "peck_2": render_true_ground_peck_frame(phase=2), # 触地回弹轻嚼
-        "peck_3": render_true_ground_peck_frame(phase=3), # 抬头嚼食复位
-        "chew_0": bird_q_optimized(head=(-3, 3)),
-        "chew_1": bird_q_optimized(head=(-5, 4), mouth="bite", crumbs=True),
+        "peck_0": render_true_ground_peck_frame(phase=0, crest_style=crest_style),
+        "peck_1": render_true_ground_peck_frame(phase=1, crest_style=crest_style),
+        "peck_2": render_true_ground_peck_frame(phase=2, crest_style=crest_style),
+        "peck_3": render_true_ground_peck_frame(phase=3, crest_style=crest_style),
+        "chew_0": bird_q_optimized(head=(-3, 3), crest_style=crest_style),
+        "chew_1": bird_q_optimized(head=(-5, 4), mouth="bite", crumbs=True, crest_style=crest_style),
         
         # 蓬毛团子
-        "fluff_0": bird_q_optimized(puff=3, eye="closed", crest="low"),
-        "fluff_1": bird_q_optimized(puff=5, eye="closed", crest="low", lift=-1),
+        "fluff_0": bird_q_optimized(puff=3, eye="closed", crest="low", crest_style=crest_style),
+        "fluff_1": bird_q_optimized(puff=5, eye="closed", crest="low", lift=-1, crest_style=crest_style),
         
         # 整理羽毛 (转头180°埋进背后羽毛细致啄理)
-        "preen_0": render_preen_back_frame(phase=0),
-        "preen_1": render_preen_back_frame(phase=1),
-        "preen_2": render_preen_back_frame(phase=2),
-        "preen_3": render_preen_back_frame(phase=3),
+        "preen_0": render_preen_back_frame(phase=0, crest_style=crest_style),
+        "preen_1": render_preen_back_frame(phase=1, crest_style=crest_style),
+        "preen_2": render_preen_back_frame(phase=2, crest_style=crest_style),
+        "preen_3": render_preen_back_frame(phase=3, crest_style=crest_style),
         
         # 求摸摸 (注入极致享受眯眯笑眼 ^_^)
-        "bow_0": bird_q_optimized(head=(-5, 7), eye="closed", crest="low"),
-        "bow_1": bird_q_optimized(head=(-8, 13), eye="happy", crest="low"), # 舒服眯眯笑眼！
+        "bow_0": bird_q_optimized(head=(-5, 7), eye="closed", crest="low", crest_style=crest_style),
+        "bow_1": bird_q_optimized(head=(-8, 13), eye="happy", crest="low", crest_style=crest_style),
         
-        # 雀跃小跳
-        "hop_0": bird_q_optimized(lift=1), # 起跳下蹲蓄力
-        "hop_1": bird_q_optimized(lift=-6, step=1, tuck_feet=True), # 腾空悬空缩脚
+        # 雀跃小跳 (4帧连环物理惯性跳跃: 蹲踞蓄力高耸 -> 腾空冲刺风阻后掠贴背 -> 落地触地回弹眯眼笑 -> 顺势回弹起立立正)
+        "hop_0": bird_q_optimized(lift=2, body_roll=1, tail_wag=-1, head=(-2, 2), crest="alert", eye="open", step=0, tuck_feet=False, crest_style=crest_style),
+        "hop_1": bird_q_optimized(lift=-9, body_roll=-4, tail_wag=5, head=(-4, -1), crest="low", eye="wide", step=0, tuck_feet=True, wing="heart", crest_style=crest_style),
+        "hop_2": bird_q_optimized(lift=1, body_roll=-2, tail_wag=2, head=(-3, 3), crest="normal", eye="happy", puff=0, step=0, tuck_feet=False, crest_style=crest_style),
+        "hop_3": bird_q_optimized(lift=-2, body_roll=-1, tail_wag=1, head=(0, 0), crest="alert", eye="open", step=0, tuck_feet=False, crest_style=crest_style),
         
         # 点头打节拍
-        "bob_0": bird_q_optimized(head=(0, -2)),
-        "bob_1": bird_q_optimized(head=(-3, 6)),
+        "bob_0": bird_q_optimized(head=(0, -2), crest_style=crest_style),
+        "bob_1": bird_q_optimized(head=(-3, 6), crest_style=crest_style),
         
         # 心形翅膀
-        "heart_wings_0": bird_q_optimized(wing="heart"),
-        "heart_wings_1": bird_q_optimized(wing="heart", head=(0, -1)),
+        "heart_wings_0": bird_q_optimized(wing="heart", crest_style=crest_style),
+        "heart_wings_1": bird_q_optimized(wing="heart", head=(0, -1), crest_style=crest_style),
         
         # 唱歌独奏 (结合心形翅膀更蠢萌)
-        "sing_0": bird_q_optimized(wing="heart", mouth="sing", note=1, crest="alert"),
-        "sing_1": bird_q_optimized(wing="heart", mouth="sing", note=2, head=(0, -1), crest="alert"),
-        "sing_2": bird_q_optimized(wing="heart", mouth="closed", head=(0, -1)),
+        "sing_0": bird_q_optimized(wing="heart", mouth="sing", note=1, crest="alert", crest_style=crest_style),
+        "sing_1": bird_q_optimized(wing="heart", mouth="sing", note=2, head=(0, -1), crest="alert", crest_style=crest_style),
+        "sing_2": bird_q_optimized(wing="heart", mouth="closed", head=(0, -1), crest_style=crest_style),
         
         # 警觉
-        "alert_0": bird_q_optimized(head=(0, -4), crest="alert", eye="wide"),
+        "alert_0": bird_q_optimized(head=(0, -4), crest="alert", eye="wide", crest_style=crest_style),
         
         # 敲击屏幕 (5帧物理冲击：迎风后掠、撞屏大甩鞭、余震反抽)
-        "bonk_0": render_bonk_screen_frame(frame_idx=0),
-        "bonk_1": render_bonk_screen_frame(frame_idx=1),
-        "bonk_2": render_bonk_screen_frame(frame_idx=2),
-        "bonk_3": render_bonk_screen_frame(frame_idx=3),
-        "bonk_4": render_bonk_screen_frame(frame_idx=4),
+        "bonk_0": render_bonk_screen_frame(frame_idx=0, crest_style=crest_style),
+        "bonk_1": render_bonk_screen_frame(frame_idx=1, crest_style=crest_style),
+        "bonk_2": render_bonk_screen_frame(frame_idx=2, crest_style=crest_style),
+        "bonk_3": render_bonk_screen_frame(frame_idx=3, crest_style=crest_style),
+        "bonk_4": render_bonk_screen_frame(frame_idx=4, crest_style=crest_style),
 
         # 反咬受惊威慑 (以嘴巴为发散原点向前方辐射展开金黄三向音波)
-        "bite_0": bird_q_optimized(head=(1, -2), body_roll=1, tail_wag=-1, crest="alert", eye="wide", mouth="closed"),
-        "bite_1": draw_mouth_radiating_sound(bird_q_optimized(head=(-1, -1), body_roll=-1, tail_wag=3, crest="alert", eye="wide", mouth="bite"), mouth_origin=(15, 35), gap=4.5),
-        "bite_2": draw_mouth_radiating_sound(bird_q_optimized(head=(0, 0), body_roll=-1, tail_wag=2, crest="alert", eye="wide", mouth="bite"), mouth_origin=(16, 36), gap=4.5),
-        "bite_3": bird_q_optimized(head=(-1, -1), body_roll=0, tail_wag=1, crest="alert", eye="wide", mouth="closed"),
+        "bite_0": bird_q_optimized(head=(1, -2), body_roll=1, tail_wag=-1, crest="alert", eye="wide", mouth="closed", crest_style=crest_style),
+        "bite_1": draw_mouth_radiating_sound(bird_q_optimized(head=(-1, -1), body_roll=-1, tail_wag=3, crest="alert", eye="wide", mouth="bite", crest_style=crest_style), mouth_origin=(15, 35), gap=4.5),
+        "bite_2": draw_mouth_radiating_sound(bird_q_optimized(head=(0, 0), body_roll=-1, tail_wag=2, crest="alert", eye="wide", mouth="bite", crest_style=crest_style), mouth_origin=(16, 36), gap=4.5),
+        "bite_3": bird_q_optimized(head=(-1, -1), body_roll=0, tail_wag=1, crest="alert", eye="wide", mouth="closed", crest_style=crest_style),
         
         # 哈气
-        "hiss_0": bird_q_optimized(head=(-2, 2), puff=2, crest="alert", eye="wide", mouth="hiss"),
-        "hiss_1": bird_q_optimized(head=(-4, 4), puff=5, crest="alert", eye="wide", mouth="hiss", lift=-1),
+        "hiss_0": bird_q_optimized(head=(-2, 2), puff=2, crest="alert", eye="wide", mouth="hiss", crest_style=crest_style),
+        "hiss_1": bird_q_optimized(head=(-4, 4), puff=5, crest="alert", eye="wide", mouth="hiss", lift=-1, crest_style=crest_style),
         
         # 飞行 (4帧有机动力学扑翼：风阻流线羽冠、升力沉浮、柔韧折翼)
-        "fly_0": render_bird_flight_custom(wing_phase=0, lift=-4, head=(-2, -1), tail_angle=0),
-        "fly_1": render_bird_flight_custom(wing_phase=1, lift=-6, head=(-3, 0), tail_angle=2),
-        "fly_2": render_bird_flight_custom(wing_phase=2, lift=-8, head=(-3, 0), tail_angle=1),
-        "fly_3": render_bird_flight_custom(wing_phase=3, lift=-5, head=(-2, -1), tail_angle=0),
+        "fly_0": render_bird_flight_custom(wing_phase=0, lift=-4, head=(-2, -1), tail_angle=0, crest_style=crest_style),
+        "fly_1": render_bird_flight_custom(wing_phase=1, lift=-6, head=(-3, 0), tail_angle=2, crest_style=crest_style),
+        "fly_2": render_bird_flight_custom(wing_phase=2, lift=-8, head=(-3, 0), tail_angle=1, crest_style=crest_style),
+        "fly_3": render_bird_flight_custom(wing_phase=3, lift=-5, head=(-2, -1), tail_angle=0, crest_style=crest_style),
         
         # 母鸡蹲睡觉 (双脚彻底收进肚子里，软糖压扁)
-        "sleep_0": sleeping_bird_q_optimized(puff=0, head=-1, zzz=1),
-        "sleep_1": sleeping_bird_q_optimized(puff=2, head=0, zzz=2),
-        "wake_0": sleeping_bird_q_optimized(puff=0, head=-1),
-        "wake_1": bird_q_optimized(crest="alert", eye="wide", head=(0, -2)),
+        "sleep_0": sleeping_bird_q_optimized(puff=0, head=-1, zzz=1, crest_style=crest_style),
+        "sleep_1": sleeping_bird_q_optimized(puff=2, head=0, zzz=2, crest_style=crest_style),
+        "wake_0": sleeping_bird_q_optimized(puff=0, head=-1, crest_style=crest_style),
+        "wake_1": bird_q_optimized(crest="alert", eye="wide", head=(0, -2), crest_style=crest_style),
     }
-    
-    # Save optimized sprites
-    for name, img in frames.items():
-        img.save(OUT_NEW / f"{name}.png")
 
-    # Sync bite, fly & true ground peck frames to main assets/sprites directory
+def generate_optimized_suite():
+    # 1. 生成经典兔耳羽冠包 (Classic Rabbit-Ear)
+    classic_frames = build_suite_frames(crest_style="classic")
+    out_classic = Path(r"D:\pets\assets\sprites_classic")
+    out_classic.mkdir(parents=True, exist_ok=True)
+    out_new_classic = Path(r"D:\pets\2d-new\sprites_classic")
+    out_new_classic.mkdir(parents=True, exist_ok=True)
+    for name, img in classic_frames.items():
+        img.save(out_classic / f"{name}.png")
+        img.save(out_new_classic / f"{name}.png")
+    print(f"Generated {len(classic_frames)} classic sprites in {out_classic}")
+
+    # 2. 生成灵动三毛羽冠包 (Modern Triple-Tuft Recurve)
+    triple_frames = build_suite_frames(crest_style="triple")
+    out_triple = Path(r"D:\pets\assets\sprites_triple")
+    out_triple.mkdir(parents=True, exist_ok=True)
+    out_new_triple = Path(r"D:\pets\2d-new\sprites_triple")
+    out_new_triple.mkdir(parents=True, exist_ok=True)
+    for name, img in triple_frames.items():
+        img.save(out_triple / f"{name}.png")
+        img.save(out_new_triple / f"{name}.png")
+    print(f"Generated {len(triple_frames)} triple sprites in {out_triple}")
+
+    # 3. 默认将 triple 写入生产 assets/sprites 与 2d-new/sprites
     assets_sprites = Path(r"D:\pets\assets\sprites")
-    if assets_sprites.exists():
-        for b_name in [
-            "bite_0", "bite_1", "bite_2", "bite_3",
-            "fly_0", "fly_1", "fly_2", "fly_3",
-            "peck_0", "peck_1", "peck_2", "peck_3",
-            "preen_0", "preen_1", "preen_2", "preen_3",
-            "bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4",
-            "wake_0", "wake_1", "sleep_0", "sleep_1"
-        ]:
-            if b_name in frames:
-                frames[b_name].save(assets_sprites / f"{b_name}.png")
-                print(f"Synced {b_name}.png to {assets_sprites}")
-    
+    assets_sprites.mkdir(parents=True, exist_ok=True)
+    for name, img in triple_frames.items():
+        img.save(assets_sprites / f"{name}.png")
+        img.save(OUT_NEW / f"{name}.png")
+    print(f"Synced {len(triple_frames)} default sprites to {assets_sprites}")
+
     # Also copy original backup sprites for 1-to-1 comparison
     src_orig = Path(r"D:\pets\backup_original\assets\sprites")
     if src_orig.exists():
@@ -1319,7 +1619,7 @@ def generate_optimized_suite():
             img = Image.open(f)
             img.save(OUT_ORIG / f.name)
 
-    print(f"Generated {len(frames)} optimized Q-version sprites in {OUT_NEW}")
+    print("Dual crest sprite suites generated successfully!")
 
 if __name__ == "__main__":
     generate_optimized_suite()

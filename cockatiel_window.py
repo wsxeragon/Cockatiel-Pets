@@ -2,6 +2,7 @@ import os
 import time
 import math
 import random
+import json
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QPointF
@@ -26,10 +27,11 @@ class CockatielWindow(QWidget):
         self.action_end_time: float = time.time() + 3.0
         self.last_feedback: str = "刚刚来到你的桌面~"
 
-        # 动画帧控制
+        # 羽冠造型与动画帧控制
+        self.crest_style: str = self.load_saved_crest_style()
         self.current_frame_index: int = 0
         self.sprites: Dict[str, QPixmap] = {}
-        self.load_all_sprites()
+        self.load_all_sprites(self.crest_style)
 
         # 鼠标拖拽状态
         self.is_dragging: bool = False
@@ -77,14 +79,49 @@ class CockatielWindow(QWidget):
     def set_hud(self, hud):
         self.hud_window = hud
 
-    def load_all_sprites(self):
-        assets_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites")
-        if not os.path.exists(assets_dir):
+    def get_config_path(self) -> str:
+        return os.path.join(os.path.dirname(__file__), "assets", "crest_config.json")
+
+    def load_saved_crest_style(self) -> str:
+        cfg_path = self.get_config_path()
+        if os.path.exists(cfg_path):
+            try:
+                with open(cfg_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    return data.get("crest_style", "triple")
+            except Exception:
+                pass
+        return "triple"
+
+    def save_crest_style(self, style: str):
+        cfg_path = self.get_config_path()
+        try:
+            with open(cfg_path, "w", encoding="utf-8") as f:
+                json.dump({"crest_style": style}, f, ensure_ascii=False, indent=2)
+        except Exception:
+            pass
+
+    def load_all_sprites(self, crest_style: Optional[str] = None):
+        if crest_style:
+            self.crest_style = crest_style
+
+        # 根据当前羽冠造型选择素材目录
+        if self.crest_style == "classic":
+            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites_classic")
+        else:
+            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites_triple")
+
+        if not os.path.exists(target_dir):
+            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites")
+
+        if not os.path.exists(target_dir):
             return
-        for file in os.listdir(assets_dir):
+
+        self.sprites.clear()
+        for file in os.listdir(target_dir):
             if file.endswith(".png"):
                 name = os.path.splitext(file)[0]
-                pix = QPixmap(os.path.join(assets_dir, file))
+                pix = QPixmap(os.path.join(target_dir, file))
                 self.sprites[name] = pix
 
         # 动态自适应精灵画布尺寸
@@ -92,6 +129,18 @@ class CockatielWindow(QWidget):
             sw = self.sprites["idle_0"].width()
             sh = self.sprites["idle_0"].height()
             self.setFixedSize(sw, sh)
+
+        self.save_crest_style(self.crest_style)
+
+    def switch_crest_style(self, new_style: str):
+        if self.crest_style == new_style:
+            return
+        self.load_all_sprites(new_style)
+        label = "🐰 经典兔耳羽冠" if new_style == "classic" else "✨ 灵动三毛羽冠"
+        self.last_feedback = f"已换上【{label}】装扮！"
+        self.update()
+        if self.hud_window:
+            self.hud_window.update()
 
     def get_current_pixmap(self) -> QPixmap:
         frames = self.current_behavior.frames
@@ -569,6 +618,19 @@ class CockatielWindow(QWidget):
             }
         """)
         act_hud = menu.addAction("📊 开启/关闭 心态雷达监视器")
+
+        # 羽冠造型切换子菜单
+        crest_menu = menu.addMenu("👑 羽冠造型切换")
+        act_crest_classic = crest_menu.addAction("🐰 经典兔耳羽冠 (原始双叉)")
+        act_crest_triple = crest_menu.addAction("✨ 灵动三毛羽冠 (反曲重叠)")
+        act_crest_classic.setCheckable(True)
+        act_crest_triple.setCheckable(True)
+        if self.crest_style == "classic":
+            act_crest_classic.setChecked(True)
+        else:
+            act_crest_triple.setChecked(True)
+        menu.addSeparator()
+
         act_sing = menu.addAction("🎵 逗它开心吹口哨")
         act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
         act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
@@ -590,6 +652,10 @@ class CockatielWindow(QWidget):
                     self.hud_window.hide()
                 else:
                     self.hud_window.show()
+        elif res == act_crest_classic:
+            self.switch_crest_style("classic")
+        elif res == act_crest_triple:
+            self.switch_crest_style("triple")
         elif res == act_sing:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被歌声唤醒了")

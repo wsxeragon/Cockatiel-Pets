@@ -41,9 +41,6 @@ def bird(head=(0, 0), lift=0, step=0, wing="fold", puff=0, eye="open",
     d.ellipse((34-puff,32+lift-puff,72+puff,69+lift), fill=c["ink"])
     d.ellipse((36-puff,34+lift-puff,70+puff,67+lift), fill=c["grey"])
     d.ellipse((38-puff,39+lift,57,64+lift), fill=c["light"])
-    if puff:
-        for x,y in [(35,48),(34,56),(39,64),(70,42)]:
-            d.rectangle((x-2,y+lift,x+1,y+lift+2), fill=c["light"])
     if wing.startswith("fly"):
         wing_shape = {"fly_up": [(48,43),(56,26),(64,7),(69,10),(65,35),(56,51)],
                       "fly_mid": [(48,43),(67,29),(89,23),(92,28),(66,46),(54,52)],

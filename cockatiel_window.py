@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import math
 import random
@@ -6,10 +7,11 @@ import json
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QPointF
-from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform
+from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
 from PySide6.QtWidgets import QWidget, QMenu, QApplication
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS
+from config import get_base_dir, is_dev_mode
 
 class CockatielWindow(QWidget):
     """原始灰玄凤鹦鹉主桌宠窗口 (透明通道、无边框、置顶)"""
@@ -20,6 +22,11 @@ class CockatielWindow(QWidget):
         self.setAttribute(Qt.WA_TranslucentBackground, True)
         self.setMouseTracking(True)
         self.setFixedSize(100, 80)
+
+        # 窗口与托盘图标
+        icon_path = os.path.join(get_base_dir(), "assets", "cockatiel.ico")
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
 
         # 心态动力学与状态机
         self.mood = MoodDynamics()
@@ -79,8 +86,9 @@ class CockatielWindow(QWidget):
     def set_hud(self, hud):
         self.hud_window = hud
 
+
     def get_config_path(self) -> str:
-        return os.path.join(os.path.dirname(__file__), "assets", "crest_config.json")
+        return os.path.join(get_base_dir(), "assets", "crest_config.json")
 
     def load_saved_crest_style(self) -> str:
         cfg_path = self.get_config_path()
@@ -106,13 +114,14 @@ class CockatielWindow(QWidget):
             self.crest_style = crest_style
 
         # 根据当前羽冠造型选择素材目录
+        base_dir = get_base_dir()
         if self.crest_style == "classic":
-            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites_classic")
+            target_dir = os.path.join(base_dir, "assets", "sprites_classic")
         else:
-            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites_triple")
+            target_dir = os.path.join(base_dir, "assets", "sprites_triple")
 
         if not os.path.exists(target_dir):
-            target_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites")
+            target_dir = os.path.join(base_dir, "assets", "sprites")
 
         if not os.path.exists(target_dir):
             return
@@ -617,9 +626,12 @@ class CockatielWindow(QWidget):
                 color: #181926;
             }
         """)
+        dev_mode = is_dev_mode()
+
+        # 1. 仪表盘开关
         act_hud = menu.addAction("📊 开启/关闭 心态雷达监视器")
 
-        # 羽冠造型切换子菜单
+        # 2. 羽冠造型切换
         crest_menu = menu.addMenu("👑 羽冠造型切换")
         act_crest_classic = crest_menu.addAction("🐰 经典兔耳羽冠 (原始双叉)")
         act_crest_triple = crest_menu.addAction("✨ 灵动三毛羽冠 (反曲重叠)")
@@ -631,18 +643,35 @@ class CockatielWindow(QWidget):
             act_crest_triple.setChecked(True)
         menu.addSeparator()
 
-        act_sing = menu.addAction("🎵 逗它开心吹口哨")
-        act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
-        act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
-        act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
-        act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
-        act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
-        act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
-        act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
-        act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
+        # 3. 清空疲劳与 4. 强制睡眠 (发布版与开发版均保留的核心控制)
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
-        act_reset = menu.addAction("🔄 重置心态为平静")
+        act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
+
+        # 仅开发调试模式显示的注入选项
+        if dev_mode:
+            menu.addSeparator()
+            act_sing = menu.addAction("🎵 逗它开心吹口哨")
+            act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
+            act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
+            act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
+            act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
+            act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
+            act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
+            act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
+            act_reset = menu.addAction("🔄 重置心态为平静")
+        else:
+            act_sing = None
+            act_hop = None
+            act_bonk = None
+            act_double_peck = None
+            act_peck = None
+            act_preen = None
+            act_fly = None
+            act_fright = None
+            act_reset = None
+
         menu.addSeparator()
+        # 5. 退出
         act_quit = menu.addAction("❌ 告别退出")
 
         res = menu.exec(global_pos)
@@ -656,37 +685,37 @@ class CockatielWindow(QWidget):
             self.switch_crest_style("classic")
         elif res == act_crest_triple:
             self.switch_crest_style("triple")
-        elif res == act_sing:
+        elif res == act_clear_fatigue:
+            self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
+        elif res == act_sleep:
+            self.force_sleep("右键菜单触发：疲劳度拉满，进入熟睡")
+        elif act_sing and res == act_sing:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被歌声唤醒了")
             self.mood.excitement = 90.0
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_SING], None, "被主人逗乐，开心大声独唱！")
-        elif res == act_hop:
+        elif act_hop and res == act_hop:
             self.trigger_hop("右键菜单触发：欢快移动连环小跳！")
-        elif res == act_bonk:
+        elif act_bonk and res == act_bonk:
             self.trigger_bonk("右键菜单触发：靠边敲击屏幕！")
-        elif res == act_double_peck:
+        elif act_double_peck and res == act_double_peck:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来连环啄米")
             self.mood.excitement = max(self.mood.excitement, 70.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_DOUBLE_PECK], None, "右键菜单触发：兴奋连环双击啄桌！")
-        elif res == act_peck:
+        elif act_peck and res == act_peck:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来啄米")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], None, "右键菜单触发：闲置自然啄食！")
-        elif res == act_preen:
+        elif act_preen and res == act_preen:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来整理羽毛")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None, "右键菜单触发：转头埋背整理羽毛！")
-        elif res == act_fly:
+        elif act_fly and res == act_fly:
             self.start_flight(panic=False, roam=True)
-        elif res == act_fright:
+        elif act_fright and res == act_fright:
             self.handle_touch_body()
-        elif res == act_sleep:
-            self.force_sleep("右键菜单触发：疲劳度拉满，进入熟睡")
-        elif res == act_clear_fatigue:
-            self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
-        elif res == act_reset:
+        elif act_reset and res == act_reset:
             self.mood.fright = 0.0
             self.mood.comfort = 25.0
             self.mood.excitement = 10.0

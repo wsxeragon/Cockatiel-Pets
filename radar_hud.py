@@ -2,6 +2,7 @@ import math
 from PySide6.QtCore import Qt, QPointF
 from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPolygonF, QFont
 from PySide6.QtWidgets import QWidget, QVBoxLayout, QLabel, QHBoxLayout, QPushButton, QProgressBar
+from config import is_dev_mode
 
 class RadarHUD(QWidget):
     """四维心态雷达图与心理监视器 HUD 窗口"""
@@ -9,7 +10,11 @@ class RadarHUD(QWidget):
         super().__init__()
         self.pet = pet_window
         self.setWindowTitle("🐤 玄凤鹦鹉心理雷达监视器")
-        self.setFixedSize(320, 550)
+        self.dev_mode = is_dev_mode()
+        if self.dev_mode:
+            self.setFixedSize(320, 550)
+        else:
+            self.setFixedSize(320, 370)
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
 
@@ -71,133 +76,134 @@ class RadarHUD(QWidget):
             "QProgressBar::chunk { background: #f5c2e7; }")
         layout.addWidget(self.fatigue_bar)
 
-        # 调试测试控制按钮
-        ctrl_title = QLabel("<b>调试行为注入测试:</b>")
-        ctrl_title.setStyleSheet("font-size: 12px; color: #bac2de;")
-        layout.addWidget(ctrl_title)
+        # 调试测试控制按钮 (仅开发调试模式显示)
+        if self.dev_mode:
+            ctrl_title = QLabel("<b>调试行为注入测试:</b>")
+            ctrl_title.setStyleSheet("font-size: 12px; color: #bac2de;")
+            layout.addWidget(ctrl_title)
 
-        btn_row1 = QHBoxLayout()
-        self.btn_pet = QPushButton("摸头 (+舒适)")
-        self.btn_pet.clicked.connect(self.on_pet_clicked)
-        self.btn_poke = QPushButton("戳身子 (+惊吓)")
-        self.btn_poke.clicked.connect(self.on_poke_clicked)
-        btn_row1.addWidget(self.btn_pet)
-        btn_row1.addWidget(self.btn_poke)
-        layout.addLayout(btn_row1)
+            btn_row1 = QHBoxLayout()
+            self.btn_pet = QPushButton("摸头 (+舒适)")
+            self.btn_pet.clicked.connect(self.on_pet_clicked)
+            self.btn_poke = QPushButton("戳身子 (+惊吓)")
+            self.btn_poke.clicked.connect(self.on_poke_clicked)
+            btn_row1.addWidget(self.btn_pet)
+            btn_row1.addWidget(self.btn_poke)
+            layout.addLayout(btn_row1)
 
-        btn_row2 = QHBoxLayout()
-        self.btn_idle_charge = QPushButton("模拟长时闲置 (+精力)")
-        self.btn_idle_charge.clicked.connect(self.on_idle_charge_clicked)
-        self.btn_force_dance = QPushButton("强制兴奋自嗨")
-        self.btn_force_dance.clicked.connect(self.on_force_dance_clicked)
-        self.btn_bonk = QPushButton("🥁 敲击屏幕")
-        self.btn_bonk.setStyleSheet("""
-            QPushButton {
-                background-color: #3e3828;
-                border: 1px solid #f9e2af;
-                color: #f9e2af;
-                font-weight: bold;
-                padding: 6px 8px;
-            }
-            QPushButton:hover {
-                background-color: #554b32;
-                border-color: #fab387;
-            }
-            QPushButton:pressed {
-                background-color: #2b2518;
-            }
-        """)
-        self.btn_bonk.clicked.connect(self.on_bonk_clicked)
-        btn_row2.addWidget(self.btn_idle_charge)
-        btn_row2.addWidget(self.btn_force_dance)
-        btn_row2.addWidget(self.btn_bonk)
-        layout.addLayout(btn_row2)
+            btn_row2 = QHBoxLayout()
+            self.btn_idle_charge = QPushButton("模拟长时闲置 (+精力)")
+            self.btn_idle_charge.clicked.connect(self.on_idle_charge_clicked)
+            self.btn_force_dance = QPushButton("强制兴奋自嗨")
+            self.btn_force_dance.clicked.connect(self.on_force_dance_clicked)
+            self.btn_bonk = QPushButton("🥁 敲击屏幕")
+            self.btn_bonk.setStyleSheet("""
+                QPushButton {
+                    background-color: #3e3828;
+                    border: 1px solid #f9e2af;
+                    color: #f9e2af;
+                    font-weight: bold;
+                    padding: 6px 8px;
+                }
+                QPushButton:hover {
+                    background-color: #554b32;
+                    border-color: #fab387;
+                }
+                QPushButton:pressed {
+                    background-color: #2b2518;
+                }
+            """)
+            self.btn_bonk.clicked.connect(self.on_bonk_clicked)
+            btn_row2.addWidget(self.btn_idle_charge)
+            btn_row2.addWidget(self.btn_force_dance)
+            btn_row2.addWidget(self.btn_bonk)
+            layout.addLayout(btn_row2)
 
-        btn_row3 = QHBoxLayout()
-        self.btn_force_sleep = QPushButton("💤 强制睡眠")
-        self.btn_force_sleep.setStyleSheet("""
-            QPushButton {
-                background-color: #3b2d42;
-                border: 1px solid #f5c2e7;
-                color: #f5c2e7;
-                font-weight: bold;
-                padding: 6px 10px;
-            }
-            QPushButton:hover {
-                background-color: #4e3857;
-                border-color: #cba6f7;
-            }
-            QPushButton:pressed {
-                background-color: #241a29;
-            }
-        """)
-        self.btn_force_sleep.clicked.connect(self.on_force_sleep_clicked)
+            btn_row3 = QHBoxLayout()
+            self.btn_force_sleep = QPushButton("💤 强制睡眠")
+            self.btn_force_sleep.setStyleSheet("""
+                QPushButton {
+                    background-color: #3b2d42;
+                    border: 1px solid #f5c2e7;
+                    color: #f5c2e7;
+                    font-weight: bold;
+                    padding: 6px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #4e3857;
+                    border-color: #cba6f7;
+                }
+                QPushButton:pressed {
+                    background-color: #241a29;
+                }
+            """)
+            self.btn_force_sleep.clicked.connect(self.on_force_sleep_clicked)
 
-        self.btn_clear_fatigue = QPushButton("⚡ 清空疲劳")
-        self.btn_clear_fatigue.setStyleSheet("""
-            QPushButton {
-                background-color: #263832;
-                border: 1px solid #a6e3a1;
-                color: #a6e3a1;
-                font-weight: bold;
-                padding: 6px 10px;
-            }
-            QPushButton:hover {
-                background-color: #334d44;
-                border-color: #94e2d5;
-            }
-            QPushButton:pressed {
-                background-color: #172420;
-            }
-        """)
-        self.btn_clear_fatigue.clicked.connect(self.on_clear_fatigue_clicked)
+            self.btn_clear_fatigue = QPushButton("⚡ 清空疲劳")
+            self.btn_clear_fatigue.setStyleSheet("""
+                QPushButton {
+                    background-color: #263832;
+                    border: 1px solid #a6e3a1;
+                    color: #a6e3a1;
+                    font-weight: bold;
+                    padding: 6px 10px;
+                }
+                QPushButton:hover {
+                    background-color: #334d44;
+                    border-color: #94e2d5;
+                }
+                QPushButton:pressed {
+                    background-color: #172420;
+                }
+            """)
+            self.btn_clear_fatigue.clicked.connect(self.on_clear_fatigue_clicked)
 
-        btn_row3.addWidget(self.btn_force_sleep)
-        btn_row3.addWidget(self.btn_clear_fatigue)
-        layout.addLayout(btn_row3)
+            btn_row3.addWidget(self.btn_force_sleep)
+            btn_row3.addWidget(self.btn_clear_fatigue)
+            layout.addLayout(btn_row3)
 
-        btn_row4 = QHBoxLayout()
-        self.btn_hop = QPushButton("🦘 雀跃小跳")
-        self.btn_hop.setStyleSheet("""
-            QPushButton {
-                background-color: #263842;
-                border: 1px solid #89dceb;
-                color: #89dceb;
-                font-weight: bold;
-                padding: 6px 8px;
-            }
-            QPushButton:hover {
-                background-color: #334c59;
-                border-color: #a6e3a1;
-            }
-            QPushButton:pressed {
-                background-color: #17242a;
-            }
-        """)
-        self.btn_hop.clicked.connect(self.on_hop_clicked)
+            btn_row4 = QHBoxLayout()
+            self.btn_hop = QPushButton("🦘 雀跃小跳")
+            self.btn_hop.setStyleSheet("""
+                QPushButton {
+                    background-color: #263842;
+                    border: 1px solid #89dceb;
+                    color: #89dceb;
+                    font-weight: bold;
+                    padding: 6px 8px;
+                }
+                QPushButton:hover {
+                    background-color: #334c59;
+                    border-color: #a6e3a1;
+                }
+                QPushButton:pressed {
+                    background-color: #17242a;
+                }
+            """)
+            self.btn_hop.clicked.connect(self.on_hop_clicked)
 
-        self.btn_fly = QPushButton("🕊️ 舒展飞翔")
-        self.btn_fly.setStyleSheet("""
-            QPushButton {
-                background-color: #2a3447;
-                border: 1px solid #b4befe;
-                color: #b4befe;
-                font-weight: bold;
-                padding: 6px 8px;
-            }
-            QPushButton:hover {
-                background-color: #374259;
-                border-color: #cdd6f4;
-            }
-            QPushButton:pressed {
-                background-color: #1a2233;
-            }
-        """)
-        self.btn_fly.clicked.connect(self.on_fly_clicked)
+            self.btn_fly = QPushButton("🕊️ 舒展飞翔")
+            self.btn_fly.setStyleSheet("""
+                QPushButton {
+                    background-color: #2a3447;
+                    border: 1px solid #b4befe;
+                    color: #b4befe;
+                    font-weight: bold;
+                    padding: 6px 8px;
+                }
+                QPushButton:hover {
+                    background-color: #374259;
+                    border-color: #cdd6f4;
+                }
+                QPushButton:pressed {
+                    background-color: #1a2233;
+                }
+            """)
+            self.btn_fly.clicked.connect(self.on_fly_clicked)
 
-        btn_row4.addWidget(self.btn_hop)
-        btn_row4.addWidget(self.btn_fly)
-        layout.addLayout(btn_row4)
+            btn_row4.addWidget(self.btn_hop)
+            btn_row4.addWidget(self.btn_fly)
+            layout.addLayout(btn_row4)
 
     def on_pet_clicked(self):
         self.pet.handle_pet_head()

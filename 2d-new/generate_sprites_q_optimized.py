@@ -757,7 +757,7 @@ def render_bird_flight_custom(
 
     return im
 
-def render_true_ground_peck_frame(phase=0, crest_style="triple"):
+def render_true_ground_peck_frame(phase=0, crest_style="triple", with_grain=True):
     """Render a dedicated 100x80 frame where the bird realistically pecks the ground.
     Ground baseline is at y = 72.
     phase:
@@ -1017,12 +1017,13 @@ def render_true_ground_peck_frame(phase=0, crest_style="triple"):
     d.polygon(upper_beak_inner, fill=c["beak"])
     d.point(rotate_point(hx - 14, hy + 1, ox, oy, beak_rot), fill="#c8b8b5")
 
-    if phase == 2:
-        seed_pos = rotate_point(hx - 13, hy + 8, ox, oy, beak_rot)
-        d.point(seed_pos, fill="#ffcc00")
-        d.point((seed_pos[0] + 1, seed_pos[1]), fill="#ffa000")
-    elif phase == 3:
-        d.point((hx - 15, hy + 6), fill="#ffcc00")
+    if with_grain:
+        if phase == 2:
+            seed_pos = rotate_point(hx - 13, hy + 8, ox, oy, beak_rot)
+            d.point(seed_pos, fill="#ffcc00")
+            d.point((seed_pos[0] + 1, seed_pos[1]), fill="#ffa000")
+        elif phase == 3:
+            d.point((hx - 15, hy + 6), fill="#ffcc00")
 
     # 10. GROUND IMPACT TAP PARTICLES (触地瞬间清脆微星斑)
     if tap_spark:
@@ -1032,40 +1033,41 @@ def render_true_ground_peck_frame(phase=0, crest_style="triple"):
         d.point((tip_pt[0] - 3, tip_pt[1]), fill="#ffffff")
         d.point((tip_pt[0] + 4, tip_pt[1]), fill="#ff9800")
 
-    # 11. GROUND GRAIN PARTICLES (地面金黄小米颗粒进食剧情: 方案A 经典金黄小米堆)
-    def draw_single_millet(gx, gy, hl=False):
-        d.point((gx, gy + 1), fill="#c67c00")      # 底部阴影
-        d.point((gx + 1, gy + 1), fill="#b36200")  # 底部深暗角
-        d.point((gx, gy), fill="#ffea75" if hl else "#ffd54f") # 浅金反光
-        d.point((gx + 1, gy), fill="#ffa000")      # 暖金颗粒
+    # 11. GROUND GRAIN PARTICLES (自然取食地面金黄小米颗粒进食剧情: 方案A 经典金黄小米堆；兴奋敲桌时不绘制)
+    if with_grain:
+        def draw_single_millet(gx, gy, hl=False):
+            d.point((gx, gy + 1), fill="#c67c00")      # 底部阴影
+            d.point((gx + 1, gy + 1), fill="#b36200")  # 底部深暗角
+            d.point((gx, gy), fill="#ffea75" if hl else "#ffd54f") # 浅金反光
+            d.point((gx + 1, gy), fill="#ffa000")      # 暖金颗粒
 
-    if phase == 0:
-        # Phase 0: 瞄准准备，地面散落 4 粒金黄小米与细屑
-        draw_single_millet(12, 68) # 目标小米 A (正对嘴喙俯探落点)
-        draw_single_millet(7, 70)  # 旁侧小米 B
-        draw_single_millet(17, 69) # 旁侧小米 C
-        d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
-        d.point((15, 71), fill="#ffa000") # 细微谷屑
-    elif phase == 1:
-        # Phase 1: 触地啄击，喙尖正中目标小米 A，邻近谷粒受冲击微跳 1px
-        draw_single_millet(12, 67, hl=True) # 目标小米受压高光
-        draw_single_millet(6, 69)  # 谷粒 B 受震动微跳
-        draw_single_millet(18, 69) # 谷粒 C 微震
-        d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
-        d.point((10, 66), fill="#fff59d") # 冲击微粒
-        d.point((15, 68), fill="#ffa000")
-    elif phase == 2:
-        # Phase 2: 触地回弹，目标小米已叼入口中，地面留下剩余 3 粒谷物与碎屑
-        draw_single_millet(7, 70)  # 谷粒 B 回落平稳
-        draw_single_millet(17, 70) # 谷粒 C 回落平稳
-        d.point((22, 71), fill="#ffd54f") # 小谷粒 D
-        d.point((13, 71), fill="#c67c00") # 目标小米被叼走后遗留的微粒碎屑
-    else: # phase == 3
-        # Phase 3: 顺势抬头惬意咀嚼，地面余粮安静等待下一次啄食
-        draw_single_millet(7, 70)
-        draw_single_millet(17, 70)
-        d.point((22, 71), fill="#ffd54f")
-        d.point((13, 71), fill="#c67c00")
+        if phase == 0:
+            # Phase 0: 瞄准准备，地面散落 4 粒金黄小米与细屑
+            draw_single_millet(12, 68) # 目标小米 A (正对嘴喙俯探落点)
+            draw_single_millet(7, 70)  # 旁侧小米 B
+            draw_single_millet(17, 69) # 旁侧小米 C
+            d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
+            d.point((15, 71), fill="#ffa000") # 细微谷屑
+        elif phase == 1:
+            # Phase 1: 触地啄击，喙尖正中目标小米 A，邻近谷粒受冲击微跳 1px
+            draw_single_millet(12, 67, hl=True) # 目标小米受压高光
+            draw_single_millet(6, 69)  # 谷粒 B 受震动微跳
+            draw_single_millet(18, 69) # 谷粒 C 微震
+            d.point((22, 71), fill="#ffd54f") # 散落小谷粒 D
+            d.point((10, 66), fill="#fff59d") # 冲击微粒
+            d.point((15, 68), fill="#ffa000")
+        elif phase == 2:
+            # Phase 2: 触地回弹，目标小米已叼入口中，地面留下剩余 3 粒谷物与碎屑
+            draw_single_millet(7, 70)  # 谷粒 B 回落平稳
+            draw_single_millet(17, 70) # 谷粒 C 回落平稳
+            d.point((22, 71), fill="#ffd54f") # 小谷粒 D
+            d.point((13, 71), fill="#c67c00") # 目标小米被叼走后遗留的微粒碎屑
+        else: # phase == 3
+            # Phase 3: 顺势抬头惬意咀嚼，地面余粮安静等待下一次啄食
+            draw_single_millet(7, 70)
+            draw_single_millet(17, 70)
+            d.point((22, 71), fill="#ffd54f")
+            d.point((13, 71), fill="#c67c00")
 
     return im
 
@@ -1507,13 +1509,19 @@ def build_suite_frames(crest_style="triple"):
         "waddle_2": bird_q_optimized(crest_style=crest_style),
         "waddle_3": bird_q_optimized(step=2, head=(1, 1), body_roll=1, tail_wag=-2, crest_style=crest_style),
         
-        # 真实触地啄桌面与嚼食 (深潜触地 y=71、翘臀杠杆、反冲咀嚼)
-        "peck_0": render_true_ground_peck_frame(phase=0, crest_style=crest_style),
-        "peck_1": render_true_ground_peck_frame(phase=1, crest_style=crest_style),
-        "peck_2": render_true_ground_peck_frame(phase=2, crest_style=crest_style),
-        "peck_3": render_true_ground_peck_frame(phase=3, crest_style=crest_style),
+        # 真实触地啄桌面与嚼食 - 闲置自然取食 (带地面金黄小米堆与进食咀嚼)
+        "peck_0": render_true_ground_peck_frame(phase=0, crest_style=crest_style, with_grain=True),
+        "peck_1": render_true_ground_peck_frame(phase=1, crest_style=crest_style, with_grain=True),
+        "peck_2": render_true_ground_peck_frame(phase=2, crest_style=crest_style, with_grain=True),
+        "peck_3": render_true_ground_peck_frame(phase=3, crest_style=crest_style, with_grain=True),
         "chew_0": bird_q_optimized(head=(-3, 3), crest_style=crest_style),
         "chew_1": bird_q_optimized(head=(-5, 4), mouth="bite", crumbs=True, crest_style=crest_style),
+        
+        # 兴奋连环双击啄桌面 (敲桌自嗨无谷物)
+        "double_peck_0": render_true_ground_peck_frame(phase=0, crest_style=crest_style, with_grain=False),
+        "double_peck_1": render_true_ground_peck_frame(phase=1, crest_style=crest_style, with_grain=False),
+        "double_peck_2": render_true_ground_peck_frame(phase=2, crest_style=crest_style, with_grain=False),
+        "double_peck_3": render_true_ground_peck_frame(phase=3, crest_style=crest_style, with_grain=False),
         
         # 蓬毛团子
         "fluff_0": bird_q_optimized(puff=3, eye="closed", crest="low", crest_style=crest_style),

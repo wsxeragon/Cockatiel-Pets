@@ -13,20 +13,26 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
     except Exception:
         pass
 
+from PySide6.QtWidgets import QApplication
+from PySide6.QtGui import QIcon
+from config import get_base_dir, is_dev_mode
+from cockatiel_window import CockatielWindow
+from radar_hud import RadarHUD
+
 # 确保 assets/sprites 图片就绪
-sprites_dir = os.path.join(os.path.dirname(__file__), "assets", "sprites")
+sprites_dir = os.path.join(get_base_dir(), "assets", "sprites")
 if not os.path.exists(sprites_dir) or len(os.listdir(sprites_dir)) < 5:
     from generate_sprites_pixel import generate_all
     print("正在生成像素风玄凤鹦鹉帧素材...")
     generate_all()
 
-from PySide6.QtWidgets import QApplication
-from cockatiel_window import CockatielWindow
-from radar_hud import RadarHUD
-
 def main():
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
+
+    icon_path = os.path.join(get_base_dir(), "assets", "cockatiel.ico")
+    if os.path.exists(icon_path):
+        app.setWindowIcon(QIcon(icon_path))
 
     # 创建玄凤桌面宠物主窗口
     pet = CockatielWindow()

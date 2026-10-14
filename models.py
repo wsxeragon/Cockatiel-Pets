@@ -119,7 +119,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.EXCITE_DOUBLE_PECK: BehaviorDef(
         BehaviorType.EXCITE_DOUBLE_PECK, "连环双击啄桌面", 3.0, -0.4, 0.2, 1.2, 60.0, 5.0,
-        ["peck_0", "peck_1", "peck_2", "peck_1", "peck_2", "peck_3"], frame_interval_ms=140
+        ["double_peck_0", "double_peck_1", "double_peck_2", "double_peck_1", "double_peck_2", "double_peck_3"], frame_interval_ms=140
     ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(

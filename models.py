@@ -26,6 +26,7 @@ class BehaviorType(str, Enum):
     EXCITE_SING = "EXCITE_SING"
     EXCITE_BONK = "EXCITE_BONK"
     EXCITE_DOUBLE_PECK = "EXCITE_DOUBLE_PECK"
+    EXCITE_PLAY_BALL = "EXCITE_PLAY_BALL"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -121,6 +122,11 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         BehaviorType.EXCITE_DOUBLE_PECK, "连环双击啄桌面", 3.0, -0.4, 0.2, 1.2, 60.0, 5.0,
         ["double_peck_0", "double_peck_1", "double_peck_2", "double_peck_1", "double_peck_2", "double_peck_3"], frame_interval_ms=140
     ),
+    BehaviorType.EXCITE_PLAY_BALL: BehaviorDef(
+        BehaviorType.EXCITE_PLAY_BALL, "兴奋杂技踩球", 5.0, -0.4, 0.2, 1.3, 30.0, 0.0,
+        [f"play_ball_{i}" for i in range(300)], frame_interval_ms=100,
+        is_interruptible=True, is_looping=False
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -148,6 +154,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_SING,
     BehaviorType.EXCITE_BONK,
     BehaviorType.EXCITE_DOUBLE_PECK,
+    BehaviorType.EXCITE_PLAY_BALL,
     BehaviorType.MISCHIEF_CHEW,
 }
 
@@ -217,6 +224,7 @@ class MoodDynamics:
                 BehaviorType.IDLE_BLINK: -0.00035,
                 BehaviorType.IDLE_WADDLE: 0.0026,
                 BehaviorType.IDLE_FLY: 0.65,
+                BehaviorType.EXCITE_PLAY_BALL: 0.05,
                 BehaviorType.EXCITE_HOP: 0.0019,
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,

@@ -1495,9 +1495,427 @@ def render_preen_back_frame(phase=0, crest_style="triple"):
 
     return im
 
+# -------------------------------------------------------------
+# 30秒闲置杂技踩球 (300帧 260x120 高清像素舞台)
+# -------------------------------------------------------------
+def render_pure_red_ball(size=36, squash_y=1.0):
+    w = size
+    h = max(4, int(size * squash_y))
+    im = Image.new("RGBA", (w + 4, h + 4), (0, 0, 0, 0))
+    d = ImageDraw.Draw(im)
+    ox, oy = 2, 2
+    rx, ry = w / 2.0, h / 2.0
+    cx, cy = ox + rx, oy + ry
+    d.ellipse((ox, oy, ox + w - 1, oy + h - 1), fill="#3b0914")
+    d.ellipse((ox + 1, oy + 1, ox + w - 2, oy + h - 2), fill="#e63946")
+    d.ellipse((ox + 3, oy + 3, ox + w - 2, oy + h - 2), fill="#9b111e")
+    d.ellipse((ox + 1, oy + 1, ox + w - 4, oy + h - 4), fill="#d90429")
+    d.ellipse((ox + 2, oy + 2, ox + w - 5, oy + h - 5), fill="#e63946")
+    hl_cx = cx - rx * 0.42
+    hl_cy = cy - ry * 0.42
+    d.ellipse((hl_cx - 3.5, hl_cy - 3.5, hl_cx + 3.5, hl_cy + 3.5), fill="#ff758f")
+    d.ellipse((hl_cx - 2, hl_cy - 2, hl_cx + 2, hl_cy + 2), fill="#ffffff")
+    d.point((int(hl_cx + 4), int(hl_cy - 1)), fill="#ffffff")
+    return im
+
+def draw_play_ball_shadow(d, cx, ground_y, radius=18, squash=1.0, alpha_factor=1.0, cw=260):
+    sw = int(radius * 1.6 * squash)
+    sh = int(radius * 0.42 * squash)
+    if sw > 2 and sh > 1 and alpha_factor > 0.05 and cx > -20 and cx < cw + 20:
+        d.ellipse(
+            (int(cx - sw / 2), int(ground_y - sh / 2), int(cx + sw / 2), int(ground_y + sh / 2)),
+            fill=(35, 35, 45, int(85 * alpha_factor))
+        )
+
+def draw_play_ball_bird_shadow(d, cx, ground_y, width=28, alpha_factor=1.0):
+    d.ellipse(
+        (int(cx - width / 2), int(ground_y - 2), int(cx + width / 2), int(ground_y + 3)),
+        fill=(35, 35, 45, int(75 * alpha_factor))
+    )
+
+def draw_play_ball_feet(d, bird_x, bird_y, ball_cx, ball_top_y, step=0, sway=0, facing_right=False):
+    c = C
+    if not facing_right:
+        leg_left_top = (bird_x + 48 + sway, bird_y + 64)
+        leg_right_top = (bird_x + 58 + sway, bird_y + 64)
+        if step == 0:
+            l_foot = (ball_cx - 5, ball_top_y + 2)
+            r_foot = (ball_cx + 6, ball_top_y + 2)
+        elif step == 1:
+            l_foot = (ball_cx - 8, ball_top_y + 4)
+            r_foot = (ball_cx + 4, ball_top_y + 1)
+        else:
+            l_foot = (ball_cx - 4, ball_top_y + 1)
+            r_foot = (ball_cx + 8, ball_top_y + 4)
+        for (lx, ly), (tx, ty) in [(leg_left_top, l_foot), (leg_right_top, r_foot)]:
+            d.line([(lx, ly), (tx, ty)], fill=c["ink"], width=3)
+            d.line([(lx, ly), (tx, ty)], fill=c["foot"], width=2)
+            d.line([(tx - 3, ty), (tx + 2, ty + 1)], fill=c["foot"], width=2)
+    else:
+        leg_left_top = (bird_x + 42 + sway, bird_y + 64)
+        leg_right_top = (bird_x + 52 + sway, bird_y + 64)
+        if step == 0:
+            l_foot = (ball_cx - 6, ball_top_y + 2)
+            r_foot = (ball_cx + 5, ball_top_y + 2)
+        elif step == 1:
+            l_foot = (ball_cx - 4, ball_top_y + 1)
+            r_foot = (ball_cx + 8, ball_top_y + 4)
+        else:
+            l_foot = (ball_cx - 8, ball_top_y + 4)
+            r_foot = (ball_cx + 4, ball_top_y + 1)
+        for (lx, ly), (tx, ty) in [(leg_left_top, l_foot), (leg_right_top, r_foot)]:
+            d.line([(lx, ly), (tx, ty)], fill=c["ink"], width=3)
+            d.line([(lx, ly), (tx, ty)], fill=c["foot"], width=2)
+            d.line([(tx - 2, ty + 1), (tx + 3, ty)], fill=c["foot"], width=2)
+
+def draw_play_ball_sparkle(d, x, y, size=3, color="#ffd166"):
+    d.line([(x - size, y), (x + size, y)], fill=color, width=1)
+    d.line([(x, y - size), (x, y + size)], fill=color, width=1)
+    d.point((x, y), fill="#ffffff")
+
+def build_play_ball_frames(crest_style: str = "triple") -> dict:
+    CW = 260
+    CH = 120
+    GY = 98
+    BALL_SIZE = 36
+    frames = []
+
+    # Act 1: 0.0s - 2.5s (25 frames)
+    ball_spawn_x = 110
+    bird_start_cx = 175
+    for _ in range(2):
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_bird_shadow(d, bird_start_cx, GY)
+        b_im = bird_q_optimized(crest_style=crest_style)
+        im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
+        frames.append(im)
+        
+    fall_ys = [8, 32, 58, 80, GY]
+    for i, fy in enumerate(fall_ys):
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_bird_shadow(d, bird_start_cx, GY)
+        if i < 2:
+            b_im = bird_q_optimized(head=(-1, -1), crest="normal", crest_style=crest_style)
+        elif i < 4:
+            b_im = bird_q_optimized(head=(-2, -1), crest="high", crest_style=crest_style)
+        else:
+            b_im = bird_q_optimized(head=(-2, 0), crest="high", mouth="open", eye="open", crest_style=crest_style)
+        im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
+        if fy < GY:
+            ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.1)
+            im.paste(ball_im, (ball_spawn_x - 18, fy - BALL_SIZE - 2), ball_im)
+            draw_play_ball_shadow(d, ball_spawn_x, GY, radius=18, alpha_factor=max(0.1, fy / 100.0 * 0.7))
+        else:
+            ball_im = render_pure_red_ball(BALL_SIZE, squash_y=0.76)
+            im.paste(ball_im, (ball_spawn_x - 18, GY - int(BALL_SIZE * 0.76) - 2), ball_im)
+            draw_play_ball_shadow(d, ball_spawn_x, GY, radius=22, alpha_factor=1.0)
+            d.line([(ball_spawn_x - 22, GY - 2), (ball_spawn_x - 25, GY - 5)], fill="#d6ccc2", width=2)
+            d.line([(ball_spawn_x + 22, GY - 2), (ball_spawn_x + 25, GY - 5)], fill="#d6ccc2", width=2)
+        frames.append(im)
+        
+    rebound_configs = [
+        (GY - 45, 1.08, (-3, -1), "high", "whistle"),
+        (GY - 38, 1.0, (-3, 0), "high", "normal"),
+        (GY - BALL_SIZE, 1.0, (-4, 1), "high", "normal"),
+        (GY - BALL_SIZE, 1.0, (-4, 2), "high", "normal"),
+    ]
+    for by, sq, h_off, cr, mth in rebound_configs:
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_bird_shadow(d, bird_start_cx, GY)
+        b_im = bird_q_optimized(lift=2 if h_off[1] > 0 else 0, head=h_off, crest=cr, mouth=mth, crest_style=crest_style)
+        im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
+        draw_play_ball_shadow(d, ball_spawn_x, GY, radius=18, alpha_factor=0.9)
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=sq)
+        im.paste(ball_im, (ball_spawn_x - 18, by - 2), ball_im)
+        if mth == "whistle":
+            d.text((bird_start_cx - 12, 32), "♪", fill="#ffb703")
+        frames.append(im)
+        
+    flight_arc = [
+        (165, GY - 10, "fly_up"),
+        (154, GY - 20, "fly_mid"),
+        (142, GY - 29, "fly_mid"),
+        (130, GY - 35, "fly_mid"),
+        (120, GY - 34, "fly_down"),
+        (113, GY - 28, "fly_down"),
+        (110, GY - 22, "fly_mid"),
+        (110, GY - 18, "fly_mid"),
+    ]
+    for bcx, bby, w_mode in flight_arc:
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, ball_spawn_x, GY, radius=18, alpha_factor=0.9)
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (ball_spawn_x - 18, GY - BALL_SIZE - 2), ball_im)
+        ground_dist = max(1, GY - bby)
+        draw_play_ball_bird_shadow(d, bcx, GY, width=max(12, int(28 - ground_dist * 0.4)), alpha_factor=max(0.2, 0.7 - ground_dist * 0.015))
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high", crest_style=crest_style)
+        im.paste(b_im, (bcx - 53, bby - 72), b_im)
+        frames.append(im)
+        
+    touchdown_sqs = [0.86, 0.92, 1.0, 1.0, 1.0, 1.0]
+    for i, sq in enumerate(touchdown_sqs):
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, ball_spawn_x, GY, radius=int(18 / sq), alpha_factor=0.95)
+        ball_h = int(BALL_SIZE * sq)
+        ball_top = GY - ball_h
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=sq)
+        im.paste(ball_im, (ball_spawn_x - 18, ball_top - 2), ball_im)
+        bird_x = ball_spawn_x - 53
+        bird_y = ball_top - 64 + (2 if sq < 0.95 else 0)
+        w_state = "fly_mid" if i < 2 else "fold"
+        b_im = bird_q_optimized(wing=w_state, tuck_feet=True, crest="high" if i < 3 else "normal", crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, ball_spawn_x, ball_top, step=0)
+        if i >= 3:
+            draw_play_ball_sparkle(d, ball_spawn_x - 18, ball_top - 22, size=3, color="#ff477e")
+        frames.append(im)
+
+    # Act 2: Roll Left (50 frames)
+    start_x, end_x = 110, 55
+    for f in range(50):
+        t = f / 49.0
+        ease = t * t * (3 - 2 * t)
+        cur_x = int(start_x + (end_x - start_x) * ease)
+        step_type = 1 if (f // 2) % 2 == 0 else 2
+        sway = -1 if step_type == 1 else 1
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=18, alpha_factor=0.9)
+        ball_top = GY - BALL_SIZE
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_x = cur_x - 53 + sway
+        bird_y = ball_top - 64
+        w_mode = "fly_mid" if f in [12, 13, 28, 29] else "fold"
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high" if w_mode != "fold" else "normal", body_roll=sway, crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=step_type, sway=sway)
+        if f in [15, 16, 17]:
+            d.text((cur_x - 12, ball_top - 26), "♪", fill="#ffb703")
+        elif f in [35, 36]:
+            draw_play_ball_sparkle(d, cur_x - 16, ball_top - 22, size=3, color="#4cc9f0")
+        frames.append(im)
+
+    # Act 3: Balance (30 frames)
+    for f in range(30):
+        wobble = int(1.5 * math.sin(f * 0.4))
+        cur_x = 55 + wobble
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=18, alpha_factor=0.9)
+        ball_top = GY - BALL_SIZE
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_x = cur_x - 53
+        bird_y = ball_top - 64
+        w_mode = "fly_up" if (f // 3) % 2 == 0 else "fly_mid"
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high", tail_wag=2 if (f // 4) % 2 == 0 else -2, crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=0, sway=wobble)
+        if f % 8 < 3:
+            draw_play_ball_sparkle(d, cur_x + 18, ball_top - 24, size=3, color="#ffd166")
+        frames.append(im)
+
+    # Act 4: Sprint Right (60 frames)
+    start_x, end_x = 55, 195
+    for f in range(60):
+        t = f / 59.0
+        ease = t * t * (3 - 2 * t)
+        cur_x = int(start_x + (end_x - start_x) * ease)
+        step_type = 1 if (f // 2) % 2 == 0 else 2
+        sway = 1 if step_type == 1 else -1
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=18, alpha_factor=0.9)
+        ball_top = GY - BALL_SIZE
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_x = cur_x - 47 + sway
+        bird_y = ball_top - 64
+        w_mode = "fly_mid" if f in [18, 19, 40, 41] else "fold"
+        b_base = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high" if w_mode != "fold" else "normal", body_roll=-sway, crest_style=crest_style)
+        b_flipped = b_base.transpose(Image.FLIP_LEFT_RIGHT)
+        im.paste(b_flipped, (bird_x, bird_y), b_flipped)
+        draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=step_type, sway=sway, facing_right=True)
+        if f in [10, 11, 12, 32, 33]:
+            d.text((cur_x + 12, ball_top - 26), "♪", fill="#ffb703")
+        elif f in [22, 23, 50, 51]:
+            draw_play_ball_sparkle(d, cur_x + 18, ball_top - 22, size=3, color="#ff477e")
+        frames.append(im)
+
+    # Act 5: Joyful Hops (30 frames)
+    hop_frames = [
+        (0, "fold", 0.92, True, "normal"),
+        (-5, "fly_up", 1.04, True, "open"),
+        (-10, "fly_mid", 1.0, True, "open"),
+        (-12, "fly_mid", 1.0, True, "normal"),
+        (-9, "fly_down", 1.0, True, "normal"),
+        (-4, "fly_down", 1.0, True, "normal"),
+        (0, "fly_mid", 0.86, True, "normal"),
+        (0, "fold", 0.94, True, "whistle"),
+        (0, "fold", 1.0, True, "normal"),
+        (0, "fold", 1.0, True, "normal"),
+        (0, "fold", 1.0, True, "normal"),
+        (0, "fold", 1.0, True, "normal"),
+        (0, "fold", 1.0, True, "normal"),
+        (0, "fold", 0.94, True, "normal"),
+        (0, "fold", 0.90, True, "normal"),
+        (-4, "fly_up", 1.04, True, "open"),
+        (-9, "fly_mid", 1.0, True, "open"),
+        (-13, "fly_up", 1.0, False, "open"),
+        (-11, "fly_mid", 1.0, False, "normal"),
+        (-6, "fly_down", 1.0, False, "normal"),
+        (-2, "fly_down", 1.0, False, "normal"),
+        (0, "fly_mid", 0.86, False, "normal"),
+        (0, "fold", 0.94, False, "whistle"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+        (0, "fold", 1.0, False, "normal"),
+    ]
+    cur_x = 195
+    for (hop_y, w_mode, sq, is_facing_right, mth) in hop_frames:
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=int(18 / sq), alpha_factor=0.9)
+        ball_h = int(BALL_SIZE * sq)
+        ball_top = GY - ball_h
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=sq)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_cx_off = 47 if is_facing_right else 53
+        bird_x = cur_x - bird_cx_off
+        bird_y = ball_top - 64 + hop_y
+        b_base = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high", mouth=mth, crest_style=crest_style)
+        if is_facing_right:
+            b_base = b_base.transpose(Image.FLIP_LEFT_RIGHT)
+        im.paste(b_base, (bird_x, bird_y), b_base)
+        if hop_y == 0:
+            draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=0, facing_right=is_facing_right)
+        if mth == "whistle":
+            d.text((cur_x - 10 if not is_facing_right else cur_x + 10, ball_top - 26), "♪", fill="#ffb703")
+        frames.append(im)
+
+    # Act 6: Roll Center (50 frames)
+    start_x, end_x = 195, 125
+    for f in range(50):
+        t = f / 49.0
+        ease = t * t * (3 - 2 * t)
+        cur_x = int(start_x + (end_x - start_x) * ease)
+        step_type = 1 if (f // 2) % 2 == 0 else 2
+        sway = -1 if step_type == 1 else 1
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=18, alpha_factor=0.9)
+        ball_top = GY - BALL_SIZE
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_x = cur_x - 53 + sway
+        bird_y = ball_top - 64
+        w_mode = "fly_mid" if f in [14, 15, 36, 37] else "fold"
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high" if w_mode != "fold" else "normal", body_roll=sway, crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=step_type, sway=sway)
+        if f in [10, 11, 28, 29]:
+            d.text((cur_x - 14, ball_top - 26), "♪", fill="#ffb703")
+        elif f in [20, 21]:
+            draw_play_ball_sparkle(d, cur_x - 18, ball_top - 22, size=3, color="#ffd166")
+        frames.append(im)
+
+    # Act 7: Feint brake (30 frames)
+    for f in range(30):
+        if f < 15:
+            cur_x = int(125 - 10 * (f / 14.0))
+        else:
+            cur_x = int(115 + 5 * ((f - 15) / 14.0))
+        step_type = 1 if (f // 2) % 2 == 0 else 2
+        sway = -1 if step_type == 1 else 1
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, cur_x, GY, radius=18, alpha_factor=0.9)
+        ball_top = GY - BALL_SIZE
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (cur_x - 18, ball_top - 2), ball_im)
+        bird_x = cur_x - 53 + (sway if f < 25 else 0)
+        bird_y = ball_top - 64
+        w_mode = "fly_mid" if f >= 18 else "fold"
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=True, crest="high", body_roll=sway if f < 25 else 0, crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, cur_x, ball_top, step=step_type if f < 25 else 0, sway=sway if f < 25 else 0)
+        if f % 6 < 2:
+            draw_play_ball_sparkle(d, cur_x - 20, ball_top - 24, size=3, color="#4cc9f0")
+        frames.append(im)
+
+    # Act 8: 华丽大谢幕与展翅着陆 (25 frames)
+    final_x = 120
+    ball_top = GY - BALL_SIZE
+    # 8.1: Heart wings & singing on ball (10 frames)
+    for i in range(10):
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_shadow(d, final_x, GY, radius=18, alpha_factor=0.9)
+        ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+        im.paste(ball_im, (final_x - 18, ball_top - 2), ball_im)
+        bird_x = final_x - 53
+        bird_y = ball_top - 64
+        b_im = bird_q_optimized(wing="heart", puff=1, crest="high", mouth="open" if i % 2 == 1 else "whistle", tail_wag=2 if i % 4 < 2 else -2, tuck_feet=True, crest_style=crest_style)
+        im.paste(b_im, (bird_x, bird_y), b_im)
+        draw_play_ball_feet(d, bird_x, bird_y, final_x, ball_top, step=0)
+        draw_play_ball_sparkle(d, final_x - 25, ball_top - 30, size=4, color="#ffd166")
+        draw_play_ball_sparkle(d, final_x + 25, ball_top - 26, size=3, color="#ff758f")
+        if i % 3 == 1:
+            d.text((final_x - 6, ball_top - 42), "♥", fill="#ff4d6d")
+        frames.append(im)
+
+    # 8.2: 展翅飞下地面 (7 frames) + 红球从身边顺势向前滚走消失
+    flight_descent = [
+        # (bcx, bby, wing, ball_x, lift)
+        (120, ball_top + 64, "fly_up", 120, 2),  # 下蹲起飞预备
+        (114, 56, "fly_up", 115, 0),             # 腾空起飞脱离球顶
+        (106, 68, "fly_mid", 100, 0),            # 展翅平滑前下方俯冲滑翔
+        (98, 79, "fly_down", 78, 0),             # 下扑翅膀减速缓冲
+        (90, 89, "fly_mid", 52, 0),              # 贴近地面展翅
+        (84, GY, "fly_down", 24, 2),             # 双爪稳稳触地，身体下沉缓冲
+        (84, GY, "fold", -4, 0),                 # 站定收翅，红球滚出视野
+    ]
+    for (bcx, bby, w_mode, bx, l_val) in flight_descent:
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        # 1. 红球在鸟身后滚过
+        if bx > -25:
+            draw_play_ball_shadow(d, bx, GY, radius=18, alpha_factor=max(0.2, (bx + 20) / 100.0 * 0.8))
+            ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.0)
+            im.paste(ball_im, (bx - 18, GY - BALL_SIZE - 2), ball_im)
+        # 2. 小鸟地面投影
+        ground_dist = max(1, GY - bby)
+        draw_play_ball_bird_shadow(d, bcx, GY, width=max(14, int(28 - ground_dist * 0.3)), alpha_factor=max(0.25, 0.85 - ground_dist * 0.012))
+        # 3. 小鸟飞行姿态
+        b_im = bird_q_optimized(wing=w_mode, tuck_feet=(bby < GY), lift=l_val, crest="high" if bby < GY else "normal", crest_style=crest_style)
+        im.paste(b_im, (bcx - 53, bby - 72), b_im)
+        frames.append(im)
+
+    # 8.3: 平静站立在地面，红球已完全消失 (8 frames)
+    for i in range(8):
+        im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
+        d = ImageDraw.Draw(im)
+        draw_play_ball_bird_shadow(d, 84, GY, width=28, alpha_factor=0.85)
+        is_blinking = (2 <= i <= 5)
+        b_im = bird_q_optimized(wing="fold", puff=1 if i < 4 else 0, eye="blink" if is_blinking else "open", crest="normal", tuck_feet=False, crest_style=crest_style)
+        im.paste(b_im, (84 - 53, GY - 72), b_im)
+        frames.append(im)
+
+    return {f"play_ball_{idx}": img for idx, img in enumerate(frames)}
+
 def build_suite_frames(crest_style="triple"):
-    """Build all 50 procedural animation frames using the specified crest_style ('classic' or 'triple')."""
-    return {
+    """Build all procedural animation frames using the specified crest_style ('classic' or 'triple')."""
+    frames = {
         # 呼吸发呆
         "idle_0": bird_q_optimized(crest_style=crest_style),
         "idle_1": bird_q_optimized(eye="closed", crest_style=crest_style),
@@ -1588,6 +2006,9 @@ def build_suite_frames(crest_style="triple"):
         "wake_0": sleeping_bird_q_optimized(puff=0, head=-1, crest_style=crest_style),
         "wake_1": bird_q_optimized(crest="alert", eye="wide", head=(0, -2), crest_style=crest_style),
     }
+    # 30秒闲置杂技踩球 (300帧 260x120 高清像素舞台)
+    frames.update(build_play_ball_frames(crest_style=crest_style))
+    return frames
 
 def generate_optimized_suite():
     # 1. 生成经典兔耳羽冠包 (Classic Rabbit-Ear)
@@ -1612,13 +2033,13 @@ def generate_optimized_suite():
         img.save(out_new_triple / f"{name}.png")
     print(f"Generated {len(triple_frames)} triple sprites in {out_triple}")
 
-    # 3. 默认将 triple 写入生产 assets/sprites 与 2d-new/sprites
+    # 3. 默认将 classic (经典双叉兔耳羽冠) 写入生产 assets/sprites 与 2d-new/sprites
     assets_sprites = Path(r"D:\pets\assets\sprites")
     assets_sprites.mkdir(parents=True, exist_ok=True)
-    for name, img in triple_frames.items():
+    for name, img in classic_frames.items():
         img.save(assets_sprites / f"{name}.png")
         img.save(OUT_NEW / f"{name}.png")
-    print(f"Synced {len(triple_frames)} default sprites to {assets_sprites}")
+    print(f"Synced {len(classic_frames)} default classic sprites to {assets_sprites}")
 
     # Also copy original backup sprites for 1-to-1 comparison
     src_orig = Path(r"D:\pets\backup_original\assets\sprites")

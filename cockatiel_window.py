@@ -96,10 +96,10 @@ class CockatielWindow(QWidget):
             try:
                 with open(cfg_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    return data.get("crest_style", "triple")
+                    return data.get("crest_style", "classic")
             except Exception:
                 pass
-        return "triple"
+        return "classic"
 
     def save_crest_style(self, style: str):
         cfg_path = self.get_config_path()
@@ -159,6 +159,10 @@ class CockatielWindow(QWidget):
             frame_name = frames[self.current_frame_index % len(frames)]
             pix = self.sprites.get(frame_name, self.sprites.get("idle_0", QPixmap()))
 
+        # 玩球动作自带完整左右舞台编排与朝向，不作全局镜像翻转
+        if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
+            return pix
+
         # 所有原始帧面向左，只有朝右时镜像。
         if self.facing_direction == 1 and not pix.isNull():
             return pix.transformed(QTransform().scale(-1, 1))
@@ -167,6 +171,27 @@ class CockatielWindow(QWidget):
     def switch_behavior(self, new_b_def: BehaviorDef, duration: Optional[float] = None, feedback: str = None):
         if duration is None:
             duration = max(1.0, random.gauss(new_b_def.duration_mean, new_b_def.duration_std))
+
+        # 从玩球切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
+        # 鸟在最后一帧展翅飞下地面并站立于 bcx=84, ground y=98
+        # 标准 100x80 中，鸟中心 x=53, ground y=72
+        if self.current_behavior and self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL and new_b_def.code != BehaviorType.EXCITE_PLAY_BALL:
+            self.setFixedSize(100, 80)
+            restore_x = self.x() + 84 - 53
+            restore_y = self.y() + 98 - 72
+            self.move(restore_x, restore_y)
+
+        # 进入玩球时，临时扩容为 260x120 高清像素舞台，并无缝贴合原站立点
+        if new_b_def.code == BehaviorType.EXCITE_PLAY_BALL:
+            screen = QApplication.primaryScreen().geometry()
+            target_x = self.x() + 53 - 175
+            target_y = self.y() + 72 - 98
+            target_x = max(10, min(screen.width() - 270, target_x))
+            target_y = max(10, min(screen.height() - 130, target_y))
+            self.setFixedSize(260, 120)
+            self.move(target_x, target_y)
+            self.facing_direction = -1
+            duration = 60.0  # 提供充分的冗余时间，由最后一帧自然驱动谢幕切出，绝不被时钟截断
 
         # 从兴奋类行为切出时 (打断或结束)，自动清空兴奋值
         if self.current_behavior and self.current_behavior.code in EXCITED_BEHAVIORS and new_b_def.code not in EXCITED_BEHAVIORS:
@@ -275,6 +300,13 @@ class CockatielWindow(QWidget):
             if not getattr(self.current_behavior, 'is_looping', True):
                 if self.current_frame_index < len(frames) - 1:
                     self.current_frame_index += 1
+                else:
+                    # 非循环长动作播放完毕最后一帧 (如杂技踩球 300 帧完整演完大谢幕)
+                    if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "精彩杂技玩球谢幕完毕，平稳落地发呆~")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
             # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
@@ -408,6 +440,12 @@ class CockatielWindow(QWidget):
             self.move(new_x, cur_pos.y())
 
         # 4. 检查动作是否自然到期，抽取下一个动作
+        # 杂技踩球包含 300 帧完整舞台剧情 (含大谢幕与落地)，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
+        if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
+            if self.hud_window:
+                self.hud_window.update_view()
+            return
+
         if now >= self.action_end_time:
             # 兴奋类动作 (如唱歌、心形翅膀、打节拍、小跳、拆家等) 结束后，自动清空兴奋值
             if self.current_behavior.code in EXCITED_BEHAVIORS:
@@ -674,6 +712,7 @@ class CockatielWindow(QWidget):
             act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
             act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
             act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
+            act_play_ball = menu.addAction("🔴 兴奋杂技踩球 (30秒巡游)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
             act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
             act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
@@ -684,6 +723,7 @@ class CockatielWindow(QWidget):
             act_hop = None
             act_bonk = None
             act_double_peck = None
+            act_play_ball = None
             act_peck = None
             act_preen = None
             act_fly = None
@@ -723,6 +763,11 @@ class CockatielWindow(QWidget):
                 self.wake_up("被叫醒起来连环啄米")
             self.mood.excitement = max(self.mood.excitement, 70.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_DOUBLE_PECK], None, "右键菜单触发：兴奋连环双击啄桌！")
+        elif act_play_ball and res == act_play_ball:
+            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+                self.wake_up("被红球吸引醒来！")
+            self.mood.excitement = max(self.mood.excitement, 75.0)
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_PLAY_BALL], None, "右键菜单触发：兴奋杂技踩球！")
         elif act_peck and res == act_peck:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来啄米")

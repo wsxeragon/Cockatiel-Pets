@@ -50,3 +50,4 @@ $RECYCLE.BIN/
 scratch/
 tmp/
 test_*/
+.dsh-tool-vision/

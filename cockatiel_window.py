@@ -520,17 +520,11 @@ class CockatielWindow(QWidget):
                     self.hud_window.update_view()
                 return
 
-            # 摸头(低头闭眼享受)动作自然结束，或存在预设动作：下一个动作固定为整理羽毛(理毛)
+            # 仅当存在预设动作 (即鼠标点击了摸头后) 才固定衔接理毛
             if self.pending_next_behavior:
                 next_code = self.pending_next_behavior
                 self.pending_next_behavior = None
                 self.switch_behavior(BEHAVIOR_CATALOG[next_code], None, "摸头享受完毕，开始整理凌乱羽毛~")
-                if self.hud_window:
-                    self.hud_window.update_view()
-                return
-
-            if self.current_behavior.code == BehaviorType.COMFORT_BOW:
-                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None, "摸头享受完毕，开始整理凌乱羽毛~")
                 if self.hud_window:
                     self.hud_window.update_view()
                 return
@@ -598,8 +592,7 @@ class CockatielWindow(QWidget):
                 if hover_dur >= 0.6 and self.mood.fright < 25.0:
                     self.mood.hover_head_tick(0.05)
                     if self.current_behavior.code not in [BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF]:
-                        self.pending_next_behavior = BehaviorType.COMFORT_PREEN
-                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 4.0, "察觉到手停在头顶，主动低头求撸")
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], None, "察觉到手停在头顶，主动低头求撸")
         else:
             self.hover_head_start_time = None
 

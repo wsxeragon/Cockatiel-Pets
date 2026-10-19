@@ -40,6 +40,18 @@ class CockatielWindow(QWidget):
         self.sprites: Dict[str, QPixmap] = {}
         self.load_all_sprites(self.crest_style)
 
+        # 待机微动画 (呼吸 / 眨眼 / 冠羽) 的状态。只在 IDLE_BLINK 时启用。
+        # 时间基准用 monotonic 毫秒，避免系统时钟跳变。
+        self._idle_t0: float = time.monotonic()
+        self._idle_relaxed: bool = False      # False=idle_0(冠羽竖起) True=idle_2(冠羽放松)
+        self._breath_until: float = -1.0      # 身体下沉结束时刻
+        self._blink_until: float = -1.0       # 闭眼结束时刻
+        self._twitch_until: float = -1.0      # 冠羽轻抖结束时刻
+        self._next_breath: float = 0.0
+        self._next_blink: float = 0.0
+        self._next_twitch: float = 0.0
+        self._next_crest: float = 0.0
+
         # 鼠标拖拽状态与预定待执行行为 (例如摸头后固定衔接理毛)
         self.is_dragging: bool = False
         self.drag_start_pos: QPoint = QPoint()
@@ -75,6 +87,11 @@ class CockatielWindow(QWidget):
         self.anim_timer = QTimer(self)
         self.anim_timer.timeout.connect(self.on_anim_frame_step)
         self.anim_timer.start(self.current_behavior.frame_interval_ms)
+
+        # 待机微动画定时器 (60ms)：驱动呼吸 / 眨眼 / 冠羽的随机事件
+        self.idle_timer = QTimer(self)
+        self.idle_timer.timeout.connect(self.on_idle_tick)
+        self.idle_timer.start(60)
 
         # 初始化位置 (屏幕右下角靠近任务栏，完全限制在可用可视区域内)
         rect = self.get_screen_rect(use_available=True)
@@ -199,7 +216,59 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update()
 
+    def _idle_elapsed_ms(self) -> float:
+        return (time.monotonic() - self._idle_t0) * 1000.0
+
+    def _idle_frame_name(self) -> str:
+        """待机造型 = 基础姿势 + 呼吸下沉；眨眼优先级最高。"""
+        t = self._idle_elapsed_ms()
+        pose = "idle_2" if self._idle_relaxed else "idle_0"
+        if t < self._twitch_until:
+            pose = "idle_2"          # 冠羽轻抖
+        if t < self._blink_until:
+            pose = "idle_1"          # 眨眼
+        down = t < self._breath_until
+        return pose + ("_dn" if down else "")
+
+    def _idle_pixmap(self) -> QPixmap:
+        name = self._idle_frame_name()
+        pix = self.sprites.get(name)
+        if pix is not None and not pix.isNull():
+            return pix
+        if name.endswith("_dn"):                 # 缺下沉帧时退回普通帧
+            pix = self.sprites.get(name[:-3])
+            if pix is not None and not pix.isNull():
+                return pix
+        return self.sprites.get("idle_0", QPixmap())
+
+    def on_idle_tick(self):
+        """待机微动画：呼吸 / 眨眼 / 冠羽，事件驱动、间隔随机。"""
+        if self.current_behavior.code != BehaviorType.IDLE_BLINK:
+            return
+        t = self._idle_elapsed_ms()
+        if t >= self._next_crest:
+            self._idle_relaxed = not self._idle_relaxed
+            self._next_crest = t + random.uniform(8000, 18000)
+        if t >= self._next_blink:
+            self._blink_until = t + 120
+            self._next_blink = t + random.uniform(2000, 5000)
+        if t >= self._next_twitch:
+            self._twitch_until = t + 100
+            self._next_twitch = t + random.uniform(6000, 12000)
+        if t >= self._next_breath:
+            self._breath_until = t + 600
+            self._next_breath = t + random.uniform(4000, 9000)
+        self.update()
+
     def get_current_pixmap(self) -> QPixmap:
+        # 待机状态走微动画（呼吸下沉 / 随机眨眼 / 冠羽切换）
+        if self.current_behavior.code == BehaviorType.IDLE_BLINK:
+            pix = self._idle_pixmap()
+            if not pix.isNull():
+                if self.facing_direction == 1:
+                    return pix.transformed(QTransform().scale(-1, 1))
+                return pix
+
         frames = self.current_behavior.frames
         if not frames:
             pix = self.sprites.get("idle_0", QPixmap())
@@ -248,6 +317,16 @@ class CockatielWindow(QWidget):
         self.current_behavior = new_b_def
         self.current_frame_index = 0
         self.action_end_time = time.time() + duration
+
+        # 进入待机时重置微动画的随机时间表（每次待机的节奏都不同）
+        if new_b_def.code == BehaviorType.IDLE_BLINK:
+            self._idle_t0 = time.monotonic()
+            self._idle_relaxed = False
+            self._breath_until = self._blink_until = self._twitch_until = -1.0
+            self._next_blink = random.uniform(2000, 5000)
+            self._next_twitch = random.uniform(6000, 12000)
+            self._next_breath = random.uniform(1500, 3000)
+            self._next_crest = random.uniform(8000, 18000)
         if feedback:
             self.last_feedback = feedback
 

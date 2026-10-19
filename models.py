@@ -52,7 +52,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     # 日常
     BehaviorType.IDLE_BLINK: BehaviorDef(
         BehaviorType.IDLE_BLINK, "闭眼发呆", 30.0, -0.3, 0.1, -0.3, 300.0, 20.0,
-        ["idle_0", "idle_1", "idle_0"]
+        ["idle_0"], frame_interval_ms=1000
     ),
     BehaviorType.IDLE_WADDLE: BehaviorDef(
         BehaviorType.IDLE_WADDLE, "摇晃溜达(走来走去)", 55.0, -0.2, 0.2, 0.1, 300.0, 20.0,

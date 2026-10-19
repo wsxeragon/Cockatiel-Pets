@@ -2,7 +2,7 @@ import time
 import random
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Optional
 
 class BehaviorType(str, Enum):
     # 平静日常
@@ -17,6 +17,7 @@ class BehaviorType(str, Enum):
     COMFORT_PREEN = "COMFORT_PREEN"
     COMFORT_BOW = "COMFORT_BOW"
     COMFORT_APPROACH = "COMFORT_APPROACH"
+    COMFORT_YAWN = "COMFORT_YAWN"
     REST_SLEEP = "REST_SLEEP"
     REST_WAKE = "REST_WAKE"
     # 兴奋自嗨
@@ -45,6 +46,7 @@ class BehaviorDef:
     duration_std: float   # seconds
     frames: List[str]
     frame_interval_ms: int = 250
+    frame_intervals_ms: Optional[List[int]] = None
     is_interruptible: bool = True
     is_looping: bool = True
 
@@ -75,7 +77,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     # 舒适
     BehaviorType.COMFORT_FLUFF: BehaviorDef(
         BehaviorType.COMFORT_FLUFF, "蓬成毛球", 5.0, -0.5, 0.8, -0.2, 180.0, 15.0,
-        ["fluff_0", "fluff_1", "fluff_0"]
+        ["fluff_0", "fluff_1"], frame_interval_ms=900
     ),
     BehaviorType.COMFORT_PREEN: BehaviorDef(
         BehaviorType.COMFORT_PREEN, "整理羽毛(埋背理毛)", 8.0, -0.4, 0.6, -0.1, 120.0, 12.0,
@@ -88,6 +90,14 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     BehaviorType.COMFORT_APPROACH: BehaviorDef(
         BehaviorType.COMFORT_APPROACH, "飞向光标求陪伴", 1.0, -1.0, 1.1, 0.2, 3.0, 0.5,
         ["fly_0", "fly_1", "fly_2", "fly_3"], frame_interval_ms=120, is_interruptible=False
+    ),
+    BehaviorType.COMFORT_YAWN: BehaviorDef(
+        BehaviorType.COMFORT_YAWN, "伸脖打哈欠", 0.0, 0.0, 0.0, 0.0, 2.35, 0.0,
+        ["yawn_0", "yawn_1", "yawn_2", "yawn_3", "yawn_4", "yawn_5", "yawn_6", "yawn_7"],
+        frame_interval_ms=280,
+        frame_intervals_ms=[280, 220, 260, 450, 340, 240, 260, 300],
+        is_interruptible=True,
+        is_looping=False
     ),
     BehaviorType.REST_SLEEP: BehaviorDef(
         BehaviorType.REST_SLEEP, "安静睡觉", 0.0, 0.0, 0.0, 0.0, 30.0, 0.0,
@@ -107,7 +117,7 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["bob_0", "bob_1", "bob_0", "bob_1"], frame_interval_ms=160
     ),
     BehaviorType.EXCITE_HEART_WINGS: BehaviorDef(
-        BehaviorType.EXCITE_HEART_WINGS, "心形翅膀(自嗨)", 2.0, -0.5, 0.3, 1.1, 30.0, 3.0,
+        BehaviorType.EXCITE_HEART_WINGS, "心形翅膀(已隐藏)", 0.0, 0.0, 0.0, 0.0, 30.0, 3.0,
         ["heart_wings_0", "heart_wings_1", "heart_wings_0"], frame_interval_ms=240
     ),
     BehaviorType.EXCITE_SING: BehaviorDef(
@@ -235,6 +245,7 @@ class MoodDynamics:
                 BehaviorType.FRIGHT_PANIC_FLY: 0.55,
                 BehaviorType.COMFORT_FLUFF: -0.0010,
                 BehaviorType.COMFORT_PREEN: -0.0016,
+                BehaviorType.COMFORT_YAWN: -0.0050,
             }
             if behavior in active_rates:
                 rate = active_rates[behavior]
@@ -344,8 +355,8 @@ class MoodDynamics:
         candidates: List[BehaviorDef] = []
 
         for b_code, b_def in BEHAVIOR_CATALOG.items():
-            # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生)
-            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_WAKE):
+            # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生，打哈欠仅在理毛后概率触发，心形翅膀已隐藏)
+            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_WAKE, BehaviorType.COMFORT_YAWN, BehaviorType.EXCITE_HEART_WINGS):
                 continue
             # 敲击屏幕 (EXCITE_BONK) 仅在处于屏幕边缘时才允许自发触发
             if b_code == BehaviorType.EXCITE_BONK and not is_at_edge:

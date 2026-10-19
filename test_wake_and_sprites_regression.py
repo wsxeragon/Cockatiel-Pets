@@ -17,6 +17,10 @@ def test_models_definitions():
 
     bite_def = BEHAVIOR_CATALOG[BehaviorType.FRIGHT_BITE]
     assert bite_def.is_looping is False, f"FRIGHT_BITE is_looping should be False, got {bite_def.is_looping}"
+
+    fluff_def = BEHAVIOR_CATALOG[BehaviorType.COMFORT_FLUFF]
+    assert fluff_def.frames == ["fluff_0", "fluff_1"], f"COMFORT_FLUFF frames mismatch: {fluff_def.frames}"
+    assert fluff_def.frame_interval_ms == 900, f"COMFORT_FLUFF frame_interval_ms mismatch: {fluff_def.frame_interval_ms}"
     print("PASS: test_models_definitions")
 
 def test_wake_no_flicker_flow():
@@ -60,23 +64,171 @@ def test_wake_no_flicker_flow():
     pet.close()
     print("PASS: test_wake_no_flicker_flow")
 
+def test_yawn_behavior_flow():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+
+    pet = CockatielWindow()
+
+    # 1. Spontaneous selection exclusion test
+    # COMFORT_YAWN and EXCITE_HEART_WINGS should never be selected directly by select_next_behavior
+    for _ in range(50):
+        chosen, _ = pet.mood.select_next_behavior()
+        assert chosen.code != BehaviorType.COMFORT_YAWN, "COMFORT_YAWN should not be spontaneously selected!"
+        assert chosen.code != BehaviorType.EXCITE_HEART_WINGS, "EXCITE_HEART_WINGS should not be spontaneously selected!"
+
+    # 2. Trigger single yawn test (repeats=1)
+    pet.trigger_yawn("测试单次伸脖打哈欠", repeats=1)
+    assert pet.current_behavior.code == BehaviorType.COMFORT_YAWN
+    assert pet.current_frame_index == 0
+    assert pet.current_behavior.frames[pet.current_frame_index] == "yawn_0"
+    assert pet.anim_timer.interval() == 280
+
+    expected_intervals = [280, 220, 260, 450, 340, 240, 260, 300]
+    for idx in range(1, 8):
+        pet.on_anim_frame_step()
+        assert pet.current_frame_index == idx
+        assert pet.current_behavior.frames[idx] == f"yawn_{idx}"
+        assert pet.anim_timer.interval() == expected_intervals[idx]
+
+    # After frame 7 of the last repeat, transitions to IDLE_BLINK
+    pet.on_anim_frame_step()
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, f"Expected IDLE_BLINK, got {pet.current_behavior.code}"
+    assert pet.current_frame_index == 0
+
+    # 3. Multi-yawn test (repeats=3)
+    pet.trigger_yawn("测试连打3次哈欠", repeats=3)
+    assert pet.yawn_remaining_repeats == 3
+    for r in range(3):
+        # Round r: step through frames 1..7
+        for idx in range(1, 8):
+            pet.on_anim_frame_step()
+            assert pet.current_frame_index == idx
+        # Step off frame 7
+        pet.on_anim_frame_step()
+        if r < 2:
+            assert pet.current_behavior.code == BehaviorType.COMFORT_YAWN, f"Round {r} should loop to next yawn"
+            assert pet.current_frame_index == 0
+            assert pet.yawn_remaining_repeats == (2 - r)
+        else:
+            assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, "Final round should transition to IDLE_BLINK"
+            assert pet.yawn_remaining_repeats == 0
+
+    # 4. Post-preen 30% trigger test
+    # (a) When random.random() < 0.30 -> triggers yawn with 3-5 repeats
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], 10.0)
+    pet.action_end_time = time.time() - 0.1
+    import unittest.mock as mock
+    with mock.patch("random.random", return_value=0.25):
+        pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.COMFORT_YAWN
+    assert 3 <= pet.yawn_remaining_repeats <= 5
+
+    # (b) When random.random() >= 0.30 -> does NOT trigger yawn
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], 10.0)
+    pet.action_end_time = time.time() - 0.1
+    with mock.patch("random.random", return_value=0.50):
+        pet.on_main_tick()
+    assert pet.current_behavior.code != BehaviorType.COMFORT_YAWN
+
+    pet.close()
+    print("PASS: test_yawn_behavior_flow")
+
+def test_waddle_dual_mode_behavior():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+
+    pet = CockatielWindow()
+
+    # 1. Switch into IDLE_WADDLE initializes mode and direction
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 100.0)
+    assert pet.current_behavior.code == BehaviorType.IDLE_WADDLE
+    assert pet.waddle_mode in ("origin_pacing", "straight_to_edge")
+    assert pet.waddle_direction in (-1, 1)
+    assert pet.waddle_consecutive_steps == 0
+    assert pet.waddle_origin_x == pet.x()
+
+    # 2. Test origin_pacing: turning probability increases with steps
+    pet.waddle_mode = "origin_pacing"
+    pet.waddle_direction = 1
+    pet.facing_direction = 1
+    pet.waddle_consecutive_steps = 20
+
+    # Steps <= 35: does not turn around
+    import unittest.mock as mock
+    with mock.patch("random.random", return_value=0.0001):
+        pet.on_main_tick()
+    assert pet.waddle_direction == 1, "Should not turn when consecutive steps <= 35"
+
+    # Steps > 35: with turn_prob met, turns around and resets consecutive steps
+    pet.waddle_consecutive_steps = 90
+    with mock.patch("random.random", return_value=0.05):
+        pet.on_main_tick()
+    assert pet.waddle_direction == -1, "Should turn around when turn probability threshold is met"
+    assert pet.waddle_consecutive_steps == 0
+
+    # 3. Test straight_to_edge mode: hitting boundary with high excitement triggers bonk
+    pet.waddle_mode = "straight_to_edge"
+    rect = pet.get_screen_rect(use_available=True)
+    pet.move(rect.left() + 26, pet.y()) # 1 step from min_waddle_x
+    pet.waddle_direction = -1
+    pet.facing_direction = -1
+    pet.mood.excitement = 90.0 # High excitement
+    pet.mood.fright = 0.0
+
+    with mock.patch("random.random", return_value=0.10): # below bonk_prob (approx 0.87)
+        pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.EXCITE_BONK, "High excitement at edge should trigger bonk!"
+
+    # 4. Test hitting boundary with low excitement / no bonk -> turns around and walks back
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 100.0)
+    pet.waddle_mode = "straight_to_edge"
+    pet.move(rect.left() + 26, pet.y())
+    pet.waddle_direction = -1
+    pet.facing_direction = -1
+    pet.mood.excitement = 10.0 # Low excitement
+
+    with mock.patch("random.random", return_value=0.99): # above bonk_prob -> turns back
+        pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.IDLE_WADDLE
+    assert pet.waddle_direction == 1, "Should turn around away from edge when not bonking"
+
+    pet.close()
+    print("PASS: test_waddle_dual_mode_behavior")
+
 def test_sprite_integrity():
     required_sprites = [
         "peck_0", "peck_1", "peck_2", "peck_3",
         "bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4",
         "wake_0", "wake_1", "sleep_0", "sleep_1",
-        "preen_0", "preen_1", "preen_2", "preen_3"
+        "preen_0", "preen_1", "preen_2", "preen_3",
+        "yawn_0", "yawn_1", "yawn_2", "yawn_3", "yawn_4", "yawn_5", "yawn_6", "yawn_7",
+        "fluff_0", "fluff_1"
     ]
 
     for s in required_sprites:
         p_assets = Path("assets/sprites") / f"{s}.png"
+        p_classic = Path("assets/sprites_classic") / f"{s}.png"
+        p_triple = Path("assets/sprites_triple") / f"{s}.png"
         p_2d = Path("2d-new/sprites") / f"{s}.png"
         assert p_assets.exists(), f"Missing {p_assets}"
+        assert p_classic.exists(), f"Missing {p_classic}"
+        assert p_triple.exists(), f"Missing {p_triple}"
         assert p_2d.exists(), f"Missing {p_2d}"
 
         img_a = Image.open(p_assets)
+        img_c = Image.open(p_classic)
+        img_t = Image.open(p_triple)
         img_2 = Image.open(p_2d)
         assert img_a.size == (100, 80), f"Size mismatch for {p_assets}: {img_a.size}"
+        assert img_c.size == (100, 80), f"Size mismatch for {p_classic}: {img_c.size}"
+        assert img_t.size == (100, 80), f"Size mismatch for {p_triple}: {img_t.size}"
         assert img_2.size == (100, 80), f"Size mismatch for {p_2d}: {img_2.size}"
 
     print("PASS: test_sprite_integrity")
@@ -84,5 +236,7 @@ def test_sprite_integrity():
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
+    test_yawn_behavior_flow()
+    test_waddle_dual_mode_behavior()
     test_sprite_integrity()
     print("ALL TESTS PASSED!")

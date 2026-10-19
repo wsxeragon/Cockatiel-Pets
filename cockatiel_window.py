@@ -57,6 +57,7 @@ class CockatielWindow(QWidget):
         self.drag_start_pos: QPoint = QPoint()
         self.hover_head_start_time: Optional[float] = None
         self.pending_next_behavior: Optional[BehaviorType] = None
+        self.yawn_remaining_repeats: int = 0
 
         # 飞行平滑位移引擎
         self.is_flying: bool = False
@@ -73,6 +74,9 @@ class CockatielWindow(QWidget):
         self.waddle_direction: int = -1 # 参考图面向左
         self.facing_direction: int = -1 # 1: 右, -1: 左
         self.waddle_step_count: int = 0
+        self.waddle_mode: str = "origin_pacing" # "origin_pacing" (起点左右来回) 或 "straight_to_edge" (径直走向屏幕边缘)
+        self.waddle_origin_x: int = 0           # 模式一起点 X 坐标
+        self.waddle_consecutive_steps: int = 0  # 同一方向连续行走的步数 (走的越远回头概率越高)
         self.hop_direction: int = -1    # 移动小跳方向
 
         # 雷达 HUD 监视器引用
@@ -336,6 +340,10 @@ class CockatielWindow(QWidget):
         elif new_b_def.code != BehaviorType.COMFORT_BOW:
             self.pending_next_behavior = None
 
+        # 打哈欠连击计数清理 (切入非打哈欠动作时归零)
+        if new_b_def.code != BehaviorType.COMFORT_YAWN:
+            self.yawn_remaining_repeats = 0
+
         # 移动雀跃小跳：根据屏幕边缘自适应随机选择起跳方向
         if new_b_def.code == BehaviorType.EXCITE_HOP:
             rect = self.get_screen_rect(use_available=True)
@@ -348,8 +356,30 @@ class CockatielWindow(QWidget):
                 self.hop_direction = random.choice([-1, 1])
             self.facing_direction = self.hop_direction
 
+        # 摇晃溜达：初始化模式(起点来回踱步 vs 径直走碰屏幕)与初始方向
+        if new_b_def.code == BehaviorType.IDLE_WADDLE:
+            self.waddle_origin_x = self.x()
+            self.waddle_consecutive_steps = 0
+            self.waddle_step_count = 0
+            self.waddle_mode = random.choice(["origin_pacing", "straight_to_edge"])
+            rect = self.get_screen_rect(use_available=True)
+            cur_x = self.x()
+            min_x = rect.left() + 35
+            max_x = rect.right() - self.width() - 35
+            if cur_x <= min_x:
+                self.waddle_direction = 1
+            elif cur_x >= max_x:
+                self.waddle_direction = -1
+            else:
+                self.waddle_direction = random.choice([-1, 1])
+            self.facing_direction = self.waddle_direction
+
         # 调整帧播放速率
-        self.anim_timer.setInterval(new_b_def.frame_interval_ms)
+        intervals = getattr(new_b_def, 'frame_intervals_ms', None)
+        if intervals and len(intervals) > 0:
+            self.anim_timer.setInterval(intervals[0])
+        else:
+            self.anim_timer.setInterval(new_b_def.frame_interval_ms)
         self.update()
 
     def wake_up(self, reason: str):
@@ -426,22 +456,52 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update_view()
 
+    def trigger_yawn(self, reason: str = "伸脖打大哈欠！", repeats: Optional[int] = None):
+        """触发伸脖打哈欠，支持指定或随机 3~5 次连续打哈欠"""
+        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            self.wake_up("醒来伸长脖子打大哈欠")
+        self.yawn_remaining_repeats = repeats if repeats is not None else random.randint(3, 5)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_YAWN], 2.35 * self.yawn_remaining_repeats, reason)
+        if self.hud_window:
+            self.hud_window.update_view()
+
     def on_anim_frame_step(self):
         """动画帧步进"""
         frames = self.current_behavior.frames
+        intervals = getattr(self.current_behavior, 'frame_intervals_ms', None)
         if len(frames) > 1:
             if not getattr(self.current_behavior, 'is_looping', True):
                 if self.current_frame_index < len(frames) - 1:
                     self.current_frame_index += 1
+                    if intervals and self.current_frame_index < len(intervals):
+                        self.anim_timer.setInterval(intervals[self.current_frame_index])
                 else:
-                    # 非循环长动作播放完毕最后一帧 (如杂技踩球 300 帧完整演完大谢幕)
+                    # 非循环长动作播放完毕最后一帧 (如杂技踩球 300 帧完整演完大谢幕，或打哈欠 8 帧自然收尾)
                     if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
                         self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "精彩杂技玩球谢幕完毕，平稳落地发呆~")
                         if self.hud_window:
                             self.hud_window.update_view()
                         return
+                    elif self.current_behavior.code == BehaviorType.COMFORT_YAWN:
+                        if getattr(self, 'yawn_remaining_repeats', 0) > 1:
+                            self.yawn_remaining_repeats -= 1
+                            self.current_frame_index = 0
+                            if intervals and len(intervals) > 0:
+                                self.anim_timer.setInterval(intervals[0])
+                            self.action_end_time = time.time() + 2.5 * self.yawn_remaining_repeats
+                            self.last_feedback = f"惬意连续打哈欠 (剩余{self.yawn_remaining_repeats}次)..."
+                            self.update()
+                            return
+                        else:
+                            self.yawn_remaining_repeats = 0
+                            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "连续打完哈欠，神清气爽发呆~")
+                            if self.hud_window:
+                                self.hud_window.update_view()
+                            return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
+                if intervals and self.current_frame_index < len(intervals):
+                    self.anim_timer.setInterval(intervals[self.current_frame_index])
             # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
             if self.current_behavior.code == BehaviorType.EXCITE_BONK:
                 frame_name = frames[self.current_frame_index]
@@ -532,52 +592,58 @@ class CockatielWindow(QWidget):
             cur_pos = self.pos()
             rect = self.get_screen_rect(use_available=True)
             self.waddle_step_count += 1
-            # 窗口缩小后同步缩短每步的屏幕位移。
+            self.waddle_consecutive_steps += 1
             new_x = cur_pos.x() + self.waddle_direction * 2
             min_waddle_x = rect.left() + 25
             max_waddle_x = rect.right() - self.width() - 25
 
-            # 屏幕边缘折返与嘴壳敲击判定
-            if new_x <= min_waddle_x:
-                new_x = min_waddle_x
-                self.safe_move(new_x, cur_pos.y(), margin=10)
-                self.facing_direction = -1
+            # 判定是否触及屏幕边缘 (两种模式到达屏幕边缘时走统一边界逻辑)
+            if new_x <= min_waddle_x or new_x >= max_waddle_x:
+                hit_left = (new_x <= min_waddle_x)
+                clamped_x = min_waddle_x if hit_left else max_waddle_x
+                self.safe_move(clamped_x, cur_pos.y(), margin=10)
+                self.facing_direction = -1 if hit_left else 1
                 self.waddle_step_count = 0
-                # 触及屏幕左边缘：若处于兴奋或较活跃状态，高概率停下敲击屏幕边缘！
-                if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
-                    self.waddle_direction = 1  # 敲击结束后调头折返
-                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None,
-                                         "溜达撞到屏幕左边缘，兴奋用嘴壳敲击屏幕！")
-                    if self.hud_window:
-                        self.hud_window.update_view()
-                    return
-                else:
-                    self.waddle_direction = 1
-                    self.facing_direction = 1
-            elif new_x >= max_waddle_x:
-                new_x = max_waddle_x
-                self.safe_move(new_x, cur_pos.y(), margin=10)
-                self.facing_direction = 1
-                self.waddle_step_count = 0
-                # 触及屏幕右边缘：同样判定嘴壳敲击
-                if (self.mood.excitement >= 30.0 or random.random() < 0.5) and self.mood.fright < 40.0:
-                    self.waddle_direction = -1  # 敲击结束后调头折返
-                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None,
-                                         "溜达撞到屏幕右边缘，兴奋用嘴壳敲击屏幕！")
-                    if self.hud_window:
-                        self.hud_window.update_view()
-                    return
-                else:
-                    self.waddle_direction = -1
-                    self.facing_direction = -1
-            else:
-                # 走了一段距离后 (约 20~35 步，即 2~3.5 秒)，有概率随机调头踱步
-                if self.waddle_step_count > 20 and random.random() < 0.08:
-                    self.waddle_direction *= -1
-                    self.facing_direction = self.waddle_direction
-                    self.waddle_step_count = 0
+                self.waddle_consecutive_steps = 0
 
-            self.safe_move(new_x, cur_pos.y(), margin=10)
+                # 触及屏幕边缘判定：兴奋值越高，触发敲边缘的概率越大
+                # 惊吓戒备状态下 (fright >= 40) 不会自嗨敲屏
+                if self.mood.fright < 40.0:
+                    # 兴奋度在 [0, 100]：兴奋度越高，敲屏概率平滑增长 (15% ~ 95%)
+                    bonk_prob = min(0.95, max(0.10, 0.15 + (self.mood.excitement / 100.0) * 0.80))
+                    if random.random() < bonk_prob:
+                        self.waddle_direction = 1 if hit_left else -1  # 敲击结束后调头折返
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BONK], None,
+                                             f"溜达触及屏幕边缘，兴奋度({int(self.mood.excitement)}%)触发敲屏！")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
+
+                # 若未触发敲屏幕，转身往回走
+                self.waddle_direction = 1 if hit_left else -1
+                self.facing_direction = self.waddle_direction
+                self.waddle_origin_x = clamped_x
+                # 碰到边缘掉头后，随机选择下一段的漫步模式
+                self.waddle_mode = random.choice(["origin_pacing", "straight_to_edge"])
+                self.last_feedback = "触及屏幕边缘，转身往回走~"
+            else:
+                # 在屏幕可用范围内行走
+                if self.waddle_mode == "origin_pacing":
+                    # 模式一：以起点为基准，左右来回走。同一个方向走的越远，回头的概率越大
+                    # 加大来回溜达的移动距离：
+                    # 前 35 步 (约 3.5 秒 / 70px) 保持前行以展开较大尺度的漫步；
+                    # 超过 35 步后，回头概率随连续步数平滑指数增长 (50步/100px~1%，80步/160px~7%，110步/220px~20%，140步/280px~45%)
+                    if self.waddle_consecutive_steps > 35:
+                        excess = self.waddle_consecutive_steps - 35
+                        turn_prob = min(0.60, 0.005 + ((excess / 70.0) ** 2.2) * 0.18)
+                        if random.random() < turn_prob:
+                            self.waddle_direction *= -1
+                            self.facing_direction = self.waddle_direction
+                            self.waddle_consecutive_steps = 0
+                            self.last_feedback = "漫步了一段距离，悠然转身往反方向溜达~"
+                # 模式二 (straight_to_edge): 径直走直到碰到屏幕，中途不随意掉头
+
+                self.safe_move(new_x, cur_pos.y(), margin=10)
 
         # 4. 检查动作是否自然到期，抽取下一个动作
         # 杂技踩球包含 300 帧完整舞台剧情 (含大谢幕与落地)，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
@@ -607,6 +673,13 @@ class CockatielWindow(QWidget):
                 if self.hud_window:
                     self.hud_window.update_view()
                 return
+
+            # 理毛 (COMFORT_PREEN) 结束后：30% 概率触发伸脖打哈欠，连打 3~5 次
+            if self.current_behavior.code == BehaviorType.COMFORT_PREEN:
+                if random.random() < 0.30:
+                    repeats = random.randint(3, 5)
+                    self.trigger_yawn(f"理毛完毕惬意放松，连打 {repeats} 个大哈欠~", repeats=repeats)
+                    return
 
             if self.mood.should_sleep(now):
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0,
@@ -874,7 +947,10 @@ class CockatielWindow(QWidget):
             act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
             act_play_ball = menu.addAction("🔴 兴奋杂技踩球 (30秒巡游)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
+            act_waddle = menu.addAction("🚶 摇晃溜达 (双模式漫步)")
             act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
+            act_fluff = menu.addAction("🐡 蓬成毛球 (平缓起伏)")
+            act_yawn = menu.addAction("🥱 伸脖打大哈欠 (仰头3px)")
             act_fly = menu.addAction("🕊️ 舒展振翅飞翔 (有机动力学)")
             act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
             act_reset = menu.addAction("🔄 重置心态为平静")
@@ -885,7 +961,10 @@ class CockatielWindow(QWidget):
             act_double_peck = None
             act_play_ball = None
             act_peck = None
+            act_waddle = None
             act_preen = None
+            act_fluff = None
+            act_yawn = None
             act_fly = None
             act_fright = None
             act_reset = None
@@ -932,10 +1011,20 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来啄米")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], None, "右键菜单触发：闲置自然啄食！")
+        elif act_waddle and res == act_waddle:
+            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+                self.wake_up("被叫醒起来溜达")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], None, "右键菜单触发：摇晃溜达漫步！")
         elif act_preen and res == act_preen:
             if self.current_behavior.code == BehaviorType.REST_SLEEP:
                 self.wake_up("被叫醒起来整理羽毛")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None, "右键菜单触发：转头埋背整理羽毛！")
+        elif act_fluff and res == act_fluff:
+            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+                self.wake_up("被叫醒起来蓬成毛球")
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_FLUFF], None, "右键菜单触发：舒适蓬成毛球！")
+        elif act_yawn and res == act_yawn:
+            self.trigger_yawn("右键菜单触发：伸脖打大哈欠！")
         elif act_fly and res == act_fly:
             self.start_flight(panic=False, roam=True)
         elif act_fright and res == act_fright:

@@ -21,6 +21,7 @@ class BehaviorType(str, Enum):
     REST_FALL_ASLEEP = "REST_FALL_ASLEEP"
     REST_SLEEP = "REST_SLEEP"
     REST_WAKE = "REST_WAKE"
+    REST_WAKE_CURIOUS = "REST_WAKE_CURIOUS"
     # 兴奋自嗨
     EXCITE_HOP = "EXCITE_HOP"
     EXCITE_BOB = "EXCITE_BOB"
@@ -112,10 +113,17 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         ["sleep_0", "sleep_1", "sleep_0", "sleep_1"], frame_interval_ms=850
     ),
     BehaviorType.REST_WAKE: BehaviorDef(
-        BehaviorType.REST_WAKE, "醒来伸展", 0.0, 0.0, 0.0, 0.0, 1.1, 0.0,
-        ["wake_0", "wake_1", "wake_2", "wake_3"],
-        frame_interval_ms=260,
-        frame_intervals_ms=[260, 260, 260, 320],
+        BehaviorType.REST_WAKE, "醒来机敏转头", 0.0, 0.0, 0.0, 0.0, 2.2, 0.0,
+        ["wake_0", "wake_1", "wake_2", "wake_3", "wake_4", "wake_5"],
+        frame_interval_ms=300,
+        frame_intervals_ms=[350, 300, 450, 350, 280, 450],
+        is_looping=False
+    ),
+    BehaviorType.REST_WAKE_CURIOUS: BehaviorDef(
+        BehaviorType.REST_WAKE_CURIOUS, "醒来细致探头", 0.0, 0.0, 0.0, 0.0, 2.4, 0.0,
+        ["wake_0", "wake_1", "wake_c_2", "wake_c_3", "wake_3", "wake_4", "wake_5"],
+        frame_interval_ms=300,
+        frame_intervals_ms=[350, 260, 280, 380, 320, 260, 450],
         is_looping=False
     ),
     # 兴奋
@@ -367,7 +375,7 @@ class MoodDynamics:
 
         for b_code, b_def in BEHAVIOR_CATALOG.items():
             # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生，打哈欠仅在理毛后概率触发，心形翅膀已隐藏)
-            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_WAKE, BehaviorType.COMFORT_YAWN, BehaviorType.EXCITE_HEART_WINGS):
+            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS, BehaviorType.COMFORT_YAWN, BehaviorType.EXCITE_HEART_WINGS):
                 continue
             # 敲击屏幕 (EXCITE_BONK) 仅在处于屏幕边缘时才允许自发触发
             if b_code == BehaviorType.EXCITE_BONK and not is_at_edge:

@@ -21,6 +21,10 @@ def test_models_definitions():
     fluff_def = BEHAVIOR_CATALOG[BehaviorType.COMFORT_FLUFF]
     assert fluff_def.frames == ["fluff_0", "fluff_1"], f"COMFORT_FLUFF frames mismatch: {fluff_def.frames}"
     assert fluff_def.frame_interval_ms == 900, f"COMFORT_FLUFF frame_interval_ms mismatch: {fluff_def.frame_interval_ms}"
+
+    waddle_def = BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE]
+    assert waddle_def.frames == ["waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5"], f"IDLE_WADDLE frames mismatch: {waddle_def.frames}"
+    assert waddle_def.frame_interval_ms == 130, f"IDLE_WADDLE frame_interval_ms mismatch: {waddle_def.frame_interval_ms}"
     print("PASS: test_models_definitions")
 
 def test_wake_no_flicker_flow():
@@ -209,6 +213,7 @@ def test_sprite_integrity():
         "wake_0", "wake_1", "sleep_0", "sleep_1",
         "preen_0", "preen_1", "preen_2", "preen_3",
         "yawn_0", "yawn_1", "yawn_2", "yawn_3", "yawn_4", "yawn_5", "yawn_6", "yawn_7",
+        "waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5",
         "fluff_0", "fluff_1"
     ]
 

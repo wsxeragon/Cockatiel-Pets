@@ -73,9 +73,9 @@ fly_stems = ["fly_0", "fly_1", "fly_2", "fly_3"]
 fly_durs = [120, 120, 120, 120]
 create_side_by_side_action_gif(fly_stems, fly_durs, "fly_dual_crest_comparison_3x.gif", "振翅飞行流线型羽冠对比", "【经典兔耳羽冠】", "【灵动三毛羽冠】")
 
-# 5. Idle/Waddle (待机与走动对比，4帧)
-waddle_stems = ["waddle_0", "waddle_1", "waddle_2", "waddle_3"]
-waddle_durs = [180, 180, 180, 180]
+# 5. Idle/Waddle (待机与走动对比，6帧)
+waddle_stems = ["waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5"]
+waddle_durs = [130, 130, 130, 130, 130, 130]
 create_side_by_side_action_gif(waddle_stems, waddle_durs, "waddle_dual_crest_comparison_3x.gif", "走动摇摆羽冠对比", "【经典兔耳羽冠】", "【灵动三毛羽冠】")
 
 # 6. Hop (雀跃小跳羽冠惯性对比，4帧)

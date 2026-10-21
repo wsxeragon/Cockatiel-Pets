@@ -16,8 +16,15 @@ if sys.stderr and hasattr(sys.stderr, 'reconfigure'):
 from PySide6.QtWidgets import QApplication
 from PySide6.QtGui import QIcon
 from config import get_base_dir, is_dev_mode
+from autostart import sync_auto_start_path
 from cockatiel_window import CockatielWindow
 from radar_hud import RadarHUD
+
+# 确保启动时工作目录始终切至程序根目录（防止开机自启时 Windows 默认 CWD 为 System32 导致的相对路径问题）
+os.chdir(get_base_dir())
+
+# 同步开机自启路径（若移动了程序目录且此前已开启自启，自动更新注册表路径）
+sync_auto_start_path()
 
 # 确保 assets/sprites 图片就绪
 sprites_dir = os.path.join(get_base_dir(), "assets", "sprites")

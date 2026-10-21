@@ -8,10 +8,11 @@ from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QRect
 from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
-from PySide6.QtWidgets import QWidget, QMenu, QApplication
+from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS
 from config import get_base_dir, is_dev_mode
+from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
 
 class CockatielWindow(QWidget):
     """原始灰玄凤鹦鹉主桌宠窗口 (透明通道、无边框、置顶)"""
@@ -932,9 +933,19 @@ class CockatielWindow(QWidget):
             act_crest_classic.setChecked(True)
         else:
             act_crest_triple.setChecked(True)
+
+        # 3. 开机自启 (仅支持 Windows)
+        act_autostart = menu.addAction("🚀 开机自启")
+        if is_auto_start_supported():
+            act_autostart.setCheckable(True)
+            act_autostart.setChecked(is_auto_start_enabled())
+        else:
+            act_autostart.setEnabled(False)
+            act_autostart.setText("🚀 开机自启 (仅支持Windows)")
+
         menu.addSeparator()
 
-        # 3. 清空疲劳与 4. 强制睡眠 (发布版与开发版均保留的核心控制)
+        # 4. 清空疲劳与 5. 强制睡眠 (发布版与开发版均保留的核心控制)
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
 
@@ -984,6 +995,19 @@ class CockatielWindow(QWidget):
             self.switch_crest_style("classic")
         elif res == act_crest_triple:
             self.switch_crest_style("triple")
+        elif act_autostart and res == act_autostart:
+            target_state = not is_auto_start_enabled()
+            ok, msg = set_auto_start(target_state)
+            if ok:
+                status_txt = "已开启" if target_state else "已关闭"
+                self.last_feedback = f"开机自启{status_txt}"
+                tip_msg = f"🚀 开机自启{status_txt}"
+            else:
+                self.last_feedback = f"自启设置失败: {msg}"
+                tip_msg = f"❌ {self.last_feedback}"
+            if self.hud_window:
+                self.hud_window.update_view()
+            QToolTip.showText(global_pos, tip_msg, self)
         elif res == act_clear_fatigue:
             self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
         elif res == act_sleep:

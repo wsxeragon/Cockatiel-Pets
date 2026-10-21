@@ -263,6 +263,7 @@ def test_waddle_dual_mode_behavior():
 def test_sprite_integrity():
     required_sprites = [
         "peck_0", "peck_1", "peck_2", "peck_3",
+        "bite_0", "bite_1", "bite_2", "bite_3",
         "bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4",
         "wake_0", "wake_1", "wake_2", "wake_3", "wake_4", "wake_5",
         "wake_c_2", "wake_c_3",

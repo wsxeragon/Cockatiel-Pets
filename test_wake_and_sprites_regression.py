@@ -364,6 +364,45 @@ def test_head_chin_hit_zone():
     pet.close()
     print("PASS: test_head_chin_hit_zone")
 
+def test_sleep_unmirrored_z_both_directions():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+
+    pet = CockatielWindow()
+
+    # 1. 验证素材完整性：sleep_0_r 和 sleep_1_r 必须在所有装扮目录存在且为 100x80
+    for s in ["sleep_0_r", "sleep_1_r"]:
+        for d in ["assets/sprites", "assets/sprites_classic", "assets/sprites_triple", "2d-new/sprites"]:
+            p = Path(d) / f"{s}.png"
+            assert p.exists(), f"缺少右朝向睡觉精灵帧: {p}"
+            img = Image.open(p)
+            assert img.size == (100, 80), f"尺寸不符合 100x80: {p} 为 {img.size}"
+
+    # 2. 验证左朝向睡觉
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 10.0)
+    pet.facing_direction = -1
+    pix_left = pet.get_current_pixmap()
+    assert not pix_left.isNull(), "左朝向睡觉 Pixmap 不应为空"
+
+    # 3. 验证右朝向睡觉：必须取到 sleep_0_r / sleep_1_r，且 Z 字符正向（非反向镜像 Ƶ）
+    pet.facing_direction = 1
+    pix_right = pet.get_current_pixmap()
+    assert not pix_right.isNull(), "右朝向睡觉 Pixmap 不应为空"
+
+    # 检查返回图像中大 Z 对角线的斜率方向：正向 Z 的对角线自右上向左下倾斜 (y 越小 x 越大)
+    qimg = pix_right.toImage()
+    # 大 Z 位于 x 在 14..24 之间，y 在 5..15 之间
+    y8_xs = [x for x in range(14, 24) if qimg.pixelColor(x, 8).alpha() > 100]
+    y11_xs = [x for x in range(14, 24) if qimg.pixelColor(x, 11).alpha() > 100]
+    assert len(y8_xs) > 0 and len(y11_xs) > 0, "右朝向大 Z 应有实体像素"
+    assert min(y8_xs) > min(y11_xs), f"Z 字符必须保持正向！y=8 的对角线起点({min(y8_xs)})应大于 y=11 的对角线终点({min(y11_xs)})"
+
+    pet.close()
+    print("PASS: test_sleep_unmirrored_z_both_directions")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
@@ -371,4 +410,5 @@ if __name__ == "__main__":
     test_waddle_dual_mode_behavior()
     test_sprite_integrity()
     test_head_chin_hit_zone()
+    test_sleep_unmirrored_z_both_directions()
     print("ALL TESTS PASSED!")

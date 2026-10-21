@@ -276,6 +276,7 @@ class CockatielWindow(QWidget):
 
         frames = self.current_behavior.frames
         if not frames:
+            frame_name = "idle_0"
             pix = self.sprites.get("idle_0", QPixmap())
         else:
             frame_name = frames[self.current_frame_index % len(frames)]
@@ -287,6 +288,12 @@ class CockatielWindow(QWidget):
 
         # 所有原始帧面向左，只有朝右时镜像。
         if self.facing_direction == 1 and not pix.isNull():
+            # 睡觉状态朝右时：使用专用右朝向帧 (sleep_0_r, sleep_1_r)，
+            # 保证鸟体镜像朝右的同时，呼噜 Z 字符始终保持正向，绝不反转为镜像字符
+            if frame_name in ("sleep_0", "sleep_1"):
+                r_name = f"{frame_name}_r"
+                if r_name in self.sprites and not self.sprites[r_name].isNull():
+                    return self.sprites[r_name]
             return pix.transformed(QTransform().scale(-1, 1))
         return pix
 

@@ -95,6 +95,30 @@ def test_wake_no_flicker_flow():
     pet.on_anim_frame_step()
     assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
 
+    # 4. Test high fatigue (>= 90%) wake-up stays awake (does not instantly re-sleep on next tick)
+    pet.force_sleep("测试进入高疲劳睡眠")
+    for _ in range(4):
+        pet.on_anim_frame_step()
+    assert pet.current_behavior.code == BehaviorType.REST_SLEEP
+    assert pet.mood.fatigue == 100.0
+
+    # User clicks on sleeping pet
+    from PySide6.QtCore import Qt, QPointF
+    from PySide6.QtGui import QMouseEvent
+    event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(50, 50), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    pet.mousePressEvent(event)
+    assert pet.current_behavior.code in (BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS)
+
+    # Step through wake sequence
+    for _ in range(len(pet.current_behavior.frames)):
+        pet.on_anim_frame_step()
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # Next tick MUST NOT force immediate sleep
+    pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, f"Must stay awake in IDLE_BLINK, got {pet.current_behavior.code}"
+    assert pet.mood.fatigue <= 80.0, f"Fatigue should be lowered below threshold, got {pet.mood.fatigue}"
+
     pet.close()
     print("PASS: test_wake_no_flicker_flow")
 

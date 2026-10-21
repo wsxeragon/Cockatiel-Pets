@@ -284,8 +284,15 @@ class MoodDynamics:
 
             self.fatigue = max(0.0, min(100.0, self.fatigue + total_rate * dt))
 
-    def must_sleep(self) -> bool:
-        """疲劳度大于 90% 且惊吓值 < 50% 时，强制进入睡眠"""
+    def must_sleep(self, now: float = None) -> bool:
+        """疲劳度大于 90% 且惊吓值 < 50% 时，强制进入睡眠。
+        若处于唤醒冷却期 (sleep_cooldown_until) 或刚刚发生过主动交互，不强制入睡，保护用户交互体验。
+        """
+        now = time.time() if now is None else now
+        if now < self.sleep_cooldown_until:
+            return False
+        if now - self.last_interaction_time < 15.0:
+            return False
         return self.fatigue > 90.0 and self.fright < 50.0
 
     def can_sleep(self, now: float = None) -> bool:
@@ -293,17 +300,22 @@ class MoodDynamics:
         # 惊吓值优先级最高: 大于等于 50% 无论多困都绝对无法入睡
         if self.fright >= 50.0:
             return False
-        # 疲劳度大于 90% 强制可入睡 (忽略常规冷却与交互保护)
+        # 若处于唤醒冷却保护期或最近交互保护期内，绝对不入睡
+        if now < self.sleep_cooldown_until or now - self.last_interaction_time < 5.0:
+            return False
+        # 疲劳度大于 90% 强制可入睡
         if self.fatigue > 90.0:
             return True
         # 疲劳值大于 50% 且惊吓值小于 50% 可概率入睡
-        return (self.fatigue > 50.0
-                and now >= self.sleep_cooldown_until
-                and now - self.last_interaction_time >= 5.0)
+        return self.fatigue > 50.0
 
     def should_sleep(self, now: float = None) -> bool:
         """疲劳值大于50%后，疲劳值越大入睡概率越大；疲劳值>90%强制必睡(100%)；惊吓值>=50%绝对不睡"""
+        now = time.time() if now is None else now
         if self.fright >= 50.0:
+            return False
+        # 处于唤醒冷却或交互保护期内不入睡
+        if now < self.sleep_cooldown_until or now - self.last_interaction_time < 5.0:
             return False
         if self.fatigue > 90.0:
             return True

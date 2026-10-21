@@ -385,28 +385,28 @@ class CockatielWindow(QWidget):
 
     def wake_up(self, reason: str):
         """End sleep once, then prevent an immediate return to sleep."""
-        if self.current_behavior.code != BehaviorType.REST_SLEEP:
+        if self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
         self.mood.sleep_cooldown_until = time.time() + 90.0
         self.mood.last_interaction_time = time.time()
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_WAKE], 0.6, reason)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_WAKE], 1.1, reason)
 
-    def force_sleep(self, reason: str = "强制睡眠：疲劳拉满，进入熟睡"):
-        """直接将疲劳度拉满(100)，清空惊吓与兴奋，并立即进入睡眠状态"""
+    def force_sleep(self, reason: str = "强制睡眠：疲劳拉满，打瞌睡卧下入睡"):
+        """直接将疲劳度拉满(100)，清空惊吓与兴奋，并播放卧倒动画进入睡眠状态"""
         self.is_flying = False
         self.is_dragging = False
         self.mood.fright = 0.0
         self.mood.excitement = 0.0
         self.mood.fatigue = 100.0
         self.mood.sleep_cooldown_until = 0.0
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0, reason)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP], 1.35, reason)
         if self.hud_window:
             self.hud_window.update_view()
 
     def clear_fatigue(self, reason: str = "疲劳度已直接清空！"):
         """直接清空疲劳度(归零)，如果正在睡觉则神清气爽醒来"""
         self.mood.fatigue = 0.0
-        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up(reason)
         else:
             self.last_feedback = reason
@@ -499,6 +499,16 @@ class CockatielWindow(QWidget):
                             if self.hud_window:
                                 self.hud_window.update_view()
                             return
+                    elif self.current_behavior.code == BehaviorType.REST_FALL_ASLEEP:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0, "安然进入熟睡梦乡~")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
+                    elif self.current_behavior.code == BehaviorType.REST_WAKE:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "睡醒伸展完毕，站立发呆~")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
                 if intervals and self.current_frame_index < len(intervals):
@@ -562,7 +572,7 @@ class CockatielWindow(QWidget):
             pet_center = self.geometry().center()
             dist = math.hypot(cursor_pos.x() - pet_center.x(), cursor_pos.y() - pet_center.y())
             if dist < 120.0:
-                if self.current_behavior.code == BehaviorType.REST_SLEEP:
+                if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                     self.wake_up("被逼近的鼠标惊醒！")
                 self.start_flight(panic=True)
                 self.last_feedback = "惊吓值超过80%，察觉到鼠标靠近，惊恐扇翅逃跑！"
@@ -570,11 +580,20 @@ class CockatielWindow(QWidget):
                     self.hud_window.update_view()
                 return
 
-        # 2.2 疲劳度 > 90% 且惊吓值 < 50%: 强制终止其他行为，立刻进入睡眠
+        # 2.2 疲劳度 > 90% 且惊吓值 < 50%: 强制终止其他行为，立刻进入入睡过渡
         if (self.mood.must_sleep()
-                and self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_WAKE)):
-            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0,
-                                 "疲劳度超过90%，困倦难耐，强制终止当前行为秒睡！")
+                and self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE)):
+            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP], 1.35,
+                                 "疲劳度超过90%，困倦难耐，打瞌睡卧下入睡！")
+            if self.hud_window:
+                self.hud_window.update_view()
+            return
+
+        if self.current_behavior.code == BehaviorType.REST_FALL_ASLEEP:
+            if self.mood.fright >= 50.0:
+                self.wake_up("惊吓值>=50%，惊醒警惕！")
+            elif now >= self.action_end_time:
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0, "安然进入熟睡梦乡~")
             if self.hud_window:
                 self.hud_window.update_view()
             return
@@ -666,6 +685,13 @@ class CockatielWindow(QWidget):
                     self.hud_window.update_view()
                 return
 
+            # 入睡过渡播放完毕：正式进入沉睡
+            if self.current_behavior.code == BehaviorType.REST_FALL_ASLEEP:
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0, "安然进入熟睡梦乡~")
+                if self.hud_window:
+                    self.hud_window.update_view()
+                return
+
             # 仅当存在预设动作 (即鼠标点击了摸头后) 才固定衔接理毛
             if self.pending_next_behavior:
                 next_code = self.pending_next_behavior
@@ -683,8 +709,8 @@ class CockatielWindow(QWidget):
                     return
 
             if self.mood.should_sleep(now):
-                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_SLEEP], 30.0,
-                                     "困了，找个安静角落睡觉")
+                self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP], 1.35,
+                                     "太困了，打着瞌睡慢慢卧下入睡~")
                 return
             is_edge = self.is_at_screen_edge(margin=50)
             next_b_def, duration = self.mood.select_next_behavior(self.current_behavior.code, is_at_edge=is_edge)
@@ -723,7 +749,7 @@ class CockatielWindow(QWidget):
             self.safe_move(target_pos.x(), target_pos.y(), margin=5)
             return
 
-        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             if self.mood.fright > 80.0 and not self.is_flying:
                 self.wake_up("鼠标靠近受惊！")
                 self.start_flight(panic=True)
@@ -754,7 +780,7 @@ class CockatielWindow(QWidget):
             pos = event.position().toPoint()
             # Any click on the pet window is enough to wake a sleeping bird,
             # including a click on its transparent padding.
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被鼠标点击吵醒了")
                 return
             # 检查点击点是否命中非透明羽毛
@@ -786,7 +812,7 @@ class CockatielWindow(QWidget):
 
     def handle_pet_head(self):
         """摸头交互：固定切入低头享受动作，结束后固定衔接转头理毛"""
-        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("被轻轻摸醒了")
         d_co, _, msg = self.mood.pet_head()
         # 预设摸头结束后固定衔接转头理毛 (COMFORT_PREEN)
@@ -797,7 +823,7 @@ class CockatielWindow(QWidget):
     def handle_touch_body(self):
         """戳身体禁区"""
         self.pending_next_behavior = None
-        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("被戳醒了！")
         panic, msg = self.mood.touch_body()
         if panic:
@@ -813,7 +839,7 @@ class CockatielWindow(QWidget):
         if self.is_flying:
             return
         self.pending_next_behavior = None
-        if self.current_behavior.code == BehaviorType.REST_SLEEP:
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("惊醒起飞")
         rect = self.get_screen_rect(use_available=True)
         cur_x = self.x()
@@ -1011,9 +1037,9 @@ class CockatielWindow(QWidget):
         elif res == act_clear_fatigue:
             self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
         elif res == act_sleep:
-            self.force_sleep("右键菜单触发：疲劳度拉满，进入熟睡")
+            self.force_sleep("右键菜单触发：疲劳度拉满，打瞌睡卧下入睡")
         elif act_sing and res == act_sing:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被歌声唤醒了")
             self.mood.excitement = 90.0
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_SING], None, "被主人逗乐，开心大声独唱！")
@@ -1022,29 +1048,29 @@ class CockatielWindow(QWidget):
         elif act_bonk and res == act_bonk:
             self.trigger_bonk("右键菜单触发：靠边敲击屏幕！")
         elif act_double_peck and res == act_double_peck:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来连环啄米")
             self.mood.excitement = max(self.mood.excitement, 70.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_DOUBLE_PECK], None, "右键菜单触发：兴奋连环双击啄桌！")
         elif act_play_ball and res == act_play_ball:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被红球吸引醒来！")
             self.mood.excitement = max(self.mood.excitement, 75.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_PLAY_BALL], None, "右键菜单触发：兴奋杂技踩球！")
         elif act_peck and res == act_peck:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来啄米")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_PECK], None, "右键菜单触发：闲置自然啄食！")
         elif act_waddle and res == act_waddle:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来溜达")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], None, "右键菜单触发：摇晃溜达漫步！")
         elif act_preen and res == act_preen:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来整理羽毛")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None, "右键菜单触发：转头埋背整理羽毛！")
         elif act_fluff and res == act_fluff:
-            if self.current_behavior.code == BehaviorType.REST_SLEEP:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来蓬成毛球")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_FLUFF], None, "右键菜单触发：舒适蓬成毛球！")
         elif act_yawn and res == act_yawn:

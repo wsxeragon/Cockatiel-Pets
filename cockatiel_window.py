@@ -387,12 +387,18 @@ class CockatielWindow(QWidget):
         """End sleep once, then prevent an immediate return to sleep."""
         if self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
-        self.mood.sleep_cooldown_until = time.time() + 90.0
-        self.mood.last_interaction_time = time.time()
+        now = time.time()
+        self.mood.sleep_cooldown_until = now + 90.0
+        self.mood.last_interaction_time = now
+        # 用户手动唤醒或交互吵醒时：适度调降疲劳度 (降至 75.0)，避免依然卡在 >=90% 临界高位导致刚醒来就秒睡
+        if self.mood.fatigue >= 80.0:
+            self.mood.fatigue = 75.0
         # 50% 概率触发方案一 (利落机敏版)，50% 概率触发方案二 (细致观察版)
         chosen_wake = random.choice([BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS])
         duration = 2.3 if chosen_wake == BehaviorType.REST_WAKE else 2.5
         self.switch_behavior(BEHAVIOR_CATALOG[chosen_wake], duration, reason)
+        if self.hud_window:
+            self.hud_window.update_view()
 
     def force_sleep(self, reason: str = "强制睡眠：疲劳拉满，打瞌睡卧下入睡"):
         """直接将疲劳度拉满(100)，清空惊吓与兴奋，并播放卧倒动画进入睡眠状态"""
@@ -583,8 +589,8 @@ class CockatielWindow(QWidget):
                     self.hud_window.update_view()
                 return
 
-        # 2.2 疲劳度 > 90% 且惊吓值 < 50%: 强制终止其他行为，立刻进入入睡过渡
-        if (self.mood.must_sleep()
+        # 2.2 疲劳度 > 90% 且惊吓值 < 50%: 强制终止其他行为，立刻进入入睡过渡 (受唤醒冷却保护)
+        if (self.mood.must_sleep(now)
                 and self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS)):
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP], 1.35,
                                  "疲劳度超过90%，困倦难耐，打瞌睡卧下入睡！")
@@ -812,6 +818,9 @@ class CockatielWindow(QWidget):
             # 如果处于敲屏状态但被拖拽移离了屏幕边缘，立即切出敲屏
             if self.current_behavior.code == BehaviorType.EXCITE_BONK and not self.is_at_screen_edge(margin=50):
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "被移离屏幕边缘，停止敲屏发呆~")
+
+    def mouseDoubleClickEvent(self, event):
+        self.mousePressEvent(event)
 
     def handle_pet_head(self):
         """摸头交互：固定切入低头享受动作，结束后固定衔接转头理毛"""

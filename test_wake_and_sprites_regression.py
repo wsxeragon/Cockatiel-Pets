@@ -13,7 +13,11 @@ from PySide6.QtWidgets import QApplication
 def test_models_definitions():
     wake_def = BEHAVIOR_CATALOG[BehaviorType.REST_WAKE]
     assert wake_def.is_looping is False, f"REST_WAKE is_looping should be False, got {wake_def.is_looping}"
-    assert wake_def.frames == ["wake_0", "wake_1"], f"REST_WAKE frames mismatch: {wake_def.frames}"
+    assert wake_def.frames == ["wake_0", "wake_1", "wake_2", "wake_3"], f"REST_WAKE frames mismatch: {wake_def.frames}"
+
+    fall_asleep_def = BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP]
+    assert fall_asleep_def.is_looping is False, f"REST_FALL_ASLEEP is_looping should be False, got {fall_asleep_def.is_looping}"
+    assert fall_asleep_def.frames == ["fall_asleep_0", "fall_asleep_1", "fall_asleep_2", "fall_asleep_3"], f"REST_FALL_ASLEEP frames mismatch: {fall_asleep_def.frames}"
 
     bite_def = BEHAVIOR_CATALOG[BehaviorType.FRIGHT_BITE]
     assert bite_def.is_looping is False, f"FRIGHT_BITE is_looping should be False, got {bite_def.is_looping}"
@@ -36,31 +40,39 @@ def test_wake_no_flicker_flow():
 
     pet = CockatielWindow()
 
-    # 1. Force into sleep
+    # 1. Force into sleep triggers REST_FALL_ASLEEP transition
     pet.force_sleep("测试进入睡眠")
-    assert pet.current_behavior.code == BehaviorType.REST_SLEEP
+    assert pet.current_behavior.code == BehaviorType.REST_FALL_ASLEEP
     assert pet.mood.fatigue == 100.0
 
-    # 2. Clear fatigue while sleeping
+    # Step through fall asleep frames -> enters REST_SLEEP
+    for _ in range(3):
+        pet.on_anim_frame_step()
+    pet.on_anim_frame_step() # frame 3 finishes -> switches to REST_SLEEP
+    assert pet.current_behavior.code == BehaviorType.REST_SLEEP
+
+    # 2. Clear fatigue while sleeping -> enters REST_WAKE
     pet.clear_fatigue("测试清空疲劳")
     assert pet.mood.fatigue == 0.0
     assert pet.current_behavior.code == BehaviorType.REST_WAKE
     assert pet.current_frame_index == 0
     assert pet.current_behavior.frames[pet.current_frame_index] == "wake_0"
 
-    # 3. Step animation timer once -> advances to wake_1 (standing alert)
+    # 3. Step animation timer -> advances through 4 wake frames
     pet.on_anim_frame_step()
     assert pet.current_frame_index == 1
     assert pet.current_behavior.frames[pet.current_frame_index] == "wake_1"
 
-    # 4. Step animation timer again -> MUST STAY AT wake_1 (is_looping=False), NO FLICKER BACK TO wake_0!
     pet.on_anim_frame_step()
-    assert pet.current_frame_index == 1, f"Expected frame_index to stay at 1, but got {pet.current_frame_index} (flicker bug!)"
-    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_1"
+    assert pet.current_frame_index == 2
+    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_2"
 
-    # 5. Advance time beyond action_end_time and tick main loop -> transitions cleanly to IDLE_BLINK
-    pet.action_end_time = time.time() - 0.1
-    pet.on_main_tick()
+    pet.on_anim_frame_step()
+    assert pet.current_frame_index == 3
+    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_3"
+
+    # 4. Step animation timer again -> switches to IDLE_BLINK
+    pet.on_anim_frame_step()
     assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, f"Expected IDLE_BLINK, got {pet.current_behavior.code}"
     assert pet.current_frame_index == 0
     assert pet.current_behavior.frames[pet.current_frame_index] == "idle_0"
@@ -210,7 +222,9 @@ def test_sprite_integrity():
     required_sprites = [
         "peck_0", "peck_1", "peck_2", "peck_3",
         "bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4",
-        "wake_0", "wake_1", "sleep_0", "sleep_1",
+        "wake_0", "wake_1", "wake_2", "wake_3",
+        "fall_asleep_0", "fall_asleep_1", "fall_asleep_2", "fall_asleep_3",
+        "sleep_0", "sleep_1",
         "preen_0", "preen_1", "preen_2", "preen_3",
         "yawn_0", "yawn_1", "yawn_2", "yawn_3", "yawn_4", "yawn_5", "yawn_6", "yawn_7",
         "waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5",

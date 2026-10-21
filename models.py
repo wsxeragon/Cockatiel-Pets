@@ -18,6 +18,7 @@ class BehaviorType(str, Enum):
     COMFORT_BOW = "COMFORT_BOW"
     COMFORT_APPROACH = "COMFORT_APPROACH"
     COMFORT_YAWN = "COMFORT_YAWN"
+    REST_FALL_ASLEEP = "REST_FALL_ASLEEP"
     REST_SLEEP = "REST_SLEEP"
     REST_WAKE = "REST_WAKE"
     # 兴奋自嗨
@@ -99,13 +100,23 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=True,
         is_looping=False
     ),
+    BehaviorType.REST_FALL_ASLEEP: BehaviorDef(
+        BehaviorType.REST_FALL_ASLEEP, "困倦入睡", 0.0, 0.0, 0.0, 0.0, 1.35, 0.0,
+        ["fall_asleep_0", "fall_asleep_1", "fall_asleep_2", "fall_asleep_3"],
+        frame_interval_ms=320,
+        frame_intervals_ms=[350, 320, 320, 360],
+        is_looping=False
+    ),
     BehaviorType.REST_SLEEP: BehaviorDef(
         BehaviorType.REST_SLEEP, "安静睡觉", 0.0, 0.0, 0.0, 0.0, 30.0, 0.0,
         ["sleep_0", "sleep_1", "sleep_0", "sleep_1"], frame_interval_ms=850
     ),
     BehaviorType.REST_WAKE: BehaviorDef(
-        BehaviorType.REST_WAKE, "醒来伸展", 0.0, 0.0, 0.0, 0.0, 0.6, 0.0,
-        ["wake_0", "wake_1"], frame_interval_ms=300, is_looping=False
+        BehaviorType.REST_WAKE, "醒来伸展", 0.0, 0.0, 0.0, 0.0, 1.1, 0.0,
+        ["wake_0", "wake_1", "wake_2", "wake_3"],
+        frame_interval_ms=260,
+        frame_intervals_ms=[260, 260, 260, 320],
+        is_looping=False
     ),
     # 兴奋
     BehaviorType.EXCITE_HOP: BehaviorDef(

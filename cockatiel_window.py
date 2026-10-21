@@ -389,7 +389,10 @@ class CockatielWindow(QWidget):
             return
         self.mood.sleep_cooldown_until = time.time() + 90.0
         self.mood.last_interaction_time = time.time()
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_WAKE], 1.1, reason)
+        # 50% 概率触发方案一 (利落机敏版)，50% 概率触发方案二 (细致观察版)
+        chosen_wake = random.choice([BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS])
+        duration = 2.3 if chosen_wake == BehaviorType.REST_WAKE else 2.5
+        self.switch_behavior(BEHAVIOR_CATALOG[chosen_wake], duration, reason)
 
     def force_sleep(self, reason: str = "强制睡眠：疲劳拉满，打瞌睡卧下入睡"):
         """直接将疲劳度拉满(100)，清空惊吓与兴奋，并播放卧倒动画进入睡眠状态"""
@@ -504,7 +507,7 @@ class CockatielWindow(QWidget):
                         if self.hud_window:
                             self.hud_window.update_view()
                         return
-                    elif self.current_behavior.code == BehaviorType.REST_WAKE:
+                    elif self.current_behavior.code in (BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS):
                         self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "睡醒伸展完毕，站立发呆~")
                         if self.hud_window:
                             self.hud_window.update_view()
@@ -582,7 +585,7 @@ class CockatielWindow(QWidget):
 
         # 2.2 疲劳度 > 90% 且惊吓值 < 50%: 强制终止其他行为，立刻进入入睡过渡
         if (self.mood.must_sleep()
-                and self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE)):
+                and self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS)):
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP], 1.35,
                                  "疲劳度超过90%，困倦难耐，打瞌睡卧下入睡！")
             if self.hud_window:
@@ -679,7 +682,7 @@ class CockatielWindow(QWidget):
                 self.last_feedback = f"{self.current_behavior.name_cn}结束，兴奋值自动清空！"
 
             # 刚睡醒伸展完毕：平稳切入平静发呆站立
-            if self.current_behavior.code == BehaviorType.REST_WAKE:
+            if self.current_behavior.code in (BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS):
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "伸展完毕，清醒站立发呆~")
                 if self.hud_window:
                     self.hud_window.update_view()

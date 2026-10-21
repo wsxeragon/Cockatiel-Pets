@@ -13,7 +13,11 @@ from PySide6.QtWidgets import QApplication
 def test_models_definitions():
     wake_def = BEHAVIOR_CATALOG[BehaviorType.REST_WAKE]
     assert wake_def.is_looping is False, f"REST_WAKE is_looping should be False, got {wake_def.is_looping}"
-    assert wake_def.frames == ["wake_0", "wake_1", "wake_2", "wake_3"], f"REST_WAKE frames mismatch: {wake_def.frames}"
+    assert wake_def.frames == ["wake_0", "wake_1", "wake_2", "wake_3", "wake_4", "wake_5"], f"REST_WAKE frames mismatch: {wake_def.frames}"
+
+    wake_curious_def = BEHAVIOR_CATALOG[BehaviorType.REST_WAKE_CURIOUS]
+    assert wake_curious_def.is_looping is False, f"REST_WAKE_CURIOUS is_looping should be False, got {wake_curious_def.is_looping}"
+    assert wake_curious_def.frames == ["wake_0", "wake_1", "wake_c_2", "wake_c_3", "wake_3", "wake_4", "wake_5"], f"REST_WAKE_CURIOUS frames mismatch: {wake_curious_def.frames}"
 
     fall_asleep_def = BEHAVIOR_CATALOG[BehaviorType.REST_FALL_ASLEEP]
     assert fall_asleep_def.is_looping is False, f"REST_FALL_ASLEEP is_looping should be False, got {fall_asleep_def.is_looping}"
@@ -37,6 +41,7 @@ def test_wake_no_flicker_flow():
         app = QApplication(sys.argv)
 
     from cockatiel_window import CockatielWindow
+    from unittest import mock
 
     pet = CockatielWindow()
 
@@ -51,31 +56,44 @@ def test_wake_no_flicker_flow():
     pet.on_anim_frame_step() # frame 3 finishes -> switches to REST_SLEEP
     assert pet.current_behavior.code == BehaviorType.REST_SLEEP
 
-    # 2. Clear fatigue while sleeping -> enters REST_WAKE
-    pet.clear_fatigue("测试清空疲劳")
+    # 2. Test Option 1: REST_WAKE (6 frames)
+    with mock.patch("random.choice", return_value=BehaviorType.REST_WAKE):
+        pet.clear_fatigue("测试清空疲劳 - 方案一")
     assert pet.mood.fatigue == 0.0
     assert pet.current_behavior.code == BehaviorType.REST_WAKE
     assert pet.current_frame_index == 0
     assert pet.current_behavior.frames[pet.current_frame_index] == "wake_0"
 
-    # 3. Step animation timer -> advances through 4 wake frames
-    pet.on_anim_frame_step()
-    assert pet.current_frame_index == 1
-    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_1"
+    # Step animation timer -> advances through 6 wake frames (0 -> 1 -> 2 -> 3 -> 4 -> 5)
+    for expected_idx in range(1, 6):
+        pet.on_anim_frame_step()
+        assert pet.current_frame_index == expected_idx
+        assert pet.current_behavior.frames[pet.current_frame_index] == f"wake_{expected_idx}"
 
+    # Step animation timer again -> switches to IDLE_BLINK
     pet.on_anim_frame_step()
-    assert pet.current_frame_index == 2
-    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_2"
-
-    pet.on_anim_frame_step()
-    assert pet.current_frame_index == 3
-    assert pet.current_behavior.frames[pet.current_frame_index] == "wake_3"
-
-    # 4. Step animation timer again -> switches to IDLE_BLINK
-    pet.on_anim_frame_step()
-    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, f"Expected IDLE_BLINK, got {pet.current_behavior.code}"
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
     assert pet.current_frame_index == 0
     assert pet.current_behavior.frames[pet.current_frame_index] == "idle_0"
+
+    # 3. Test Option 2: REST_WAKE_CURIOUS (7 frames)
+    pet.force_sleep("测试进入睡眠2")
+    for _ in range(4):
+        pet.on_anim_frame_step()
+    assert pet.current_behavior.code == BehaviorType.REST_SLEEP
+
+    with mock.patch("random.choice", return_value=BehaviorType.REST_WAKE_CURIOUS):
+        pet.wake_up("测试唤醒 - 方案二")
+    assert pet.current_behavior.code == BehaviorType.REST_WAKE_CURIOUS
+    assert pet.current_frame_index == 0
+    assert len(pet.current_behavior.frames) == 7
+
+    for expected_idx in range(1, 7):
+        pet.on_anim_frame_step()
+        assert pet.current_frame_index == expected_idx
+
+    pet.on_anim_frame_step()
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
 
     pet.close()
     print("PASS: test_wake_no_flicker_flow")
@@ -222,7 +240,8 @@ def test_sprite_integrity():
     required_sprites = [
         "peck_0", "peck_1", "peck_2", "peck_3",
         "bonk_0", "bonk_1", "bonk_2", "bonk_3", "bonk_4",
-        "wake_0", "wake_1", "wake_2", "wake_3",
+        "wake_0", "wake_1", "wake_2", "wake_3", "wake_4", "wake_5",
+        "wake_c_2", "wake_c_3",
         "fall_asleep_0", "fall_asleep_1", "fall_asleep_2", "fall_asleep_3",
         "sleep_0", "sleep_1",
         "preen_0", "preen_1", "preen_2", "preen_3",

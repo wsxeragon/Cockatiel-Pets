@@ -739,14 +739,64 @@ class CockatielWindow(QWidget):
 
     # --- 空间交互与局部感应 ---
     def is_head_neck_zone(self, local_pos: QPoint) -> bool:
-        """判定点击/悬停位置是否在头颈部安全区 (黄脸/冠羽/脖子)"""
-        if local_pos.y() > self.height() * 0.55:
+        """判定点击/悬停位置是否在头颈部安全区 (黄脸/冠羽/嘴壳/下巴/咽喉/后颈)
+
+        支持全角度头部抚摸互动，包含下巴与嘴下喉部，同时严格保留背部/翅膀/腹部/尾巴的躯干禁区。
+        自动根据当前朝向进行左右镜像归一化，并动态适配低头(COMFORT_BOW)与啄地动作的头部位置偏移。
+        """
+        w = self.width()
+        h = self.height()
+        if local_pos.x() < 0 or local_pos.x() >= w or local_pos.y() < 0 or local_pos.y() >= h:
             return False
-        # 根据当前左右朝向适配头颈 X 坐标
-        if self.facing_direction == -1:
-            return local_pos.x() < self.width() * 0.55
-        else:
-            return local_pos.x() > self.width() * 0.45
+
+        # 针对大画布特技动作 (如玩球 260x120) 进行比例容错适配
+        if w > 120 or h > 100:
+            if local_pos.y() > h * 0.65:
+                return False
+            if self.facing_direction == -1:
+                return local_pos.x() < w * 0.55
+            else:
+                return local_pos.x() > w * 0.45
+
+        # 归一化为基准左朝向坐标 (面向左时 rx=x，面向右时镜像翻转 rx=w-1-x)
+        rx = local_pos.x() if self.facing_direction == -1 else (w - 1 - local_pos.x())
+        ry = local_pos.y()
+
+        behavior_code = self.current_behavior.code if self.current_behavior else None
+
+        # 1. 低头闭眼享受姿态 (COMFORT_BOW): 头部深低前探，头部、下巴与喉部判定区顺延向下
+        if behavior_code == BehaviorType.COMFORT_BOW:
+            if ry <= 36:
+                return rx <= 54
+            elif ry <= 58:
+                return rx <= 48
+            return False
+
+        # 2. 啄地姿态 (IDLE_PECK / EXCITE_DOUBLE_PECK): 头部低头啄食
+        if behavior_code in (BehaviorType.IDLE_PECK, BehaviorType.EXCITE_DOUBLE_PECK):
+            if ry <= 65 and rx <= 45:
+                return True
+            if ry <= 42 and rx <= 55:
+                return True
+            return False
+
+        # 3. 常规站立/行走/鸣叫/打哈欠等常态姿势 (标准 100x80 画布):
+        # 3.1 头部上部 (冠羽、额头、眼睛、嘴壳上部、脸颊上侧、脑后上颈): y <= 42, rx <= 55
+        if ry <= 42:
+            return rx <= 55
+
+        # 3.2 头部下部安全区 (嘴壳下部、下巴、咽喉前侧、下脸颊): y 在 43..53 之间
+        # 下巴及喉部羽毛位于前方 (rx <= 45)，完全包含下巴下缘及喉咙部位
+        if ry <= 53:
+            if rx <= 45:
+                return True
+            # 后脑下缘与后颈连接处 (rx 在 46..52，且 y <= 47)
+            if rx <= 52 and ry <= 47:
+                return True
+            return False
+
+        # 其余区域 (背部、翅膀、腹部、尾巴、脚爪) 判定为躯干禁区
+        return False
 
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint()

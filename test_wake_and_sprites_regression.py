@@ -296,10 +296,79 @@ def test_sprite_integrity():
 
     print("PASS: test_sprite_integrity")
 
+def test_head_chin_hit_zone():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    from PySide6.QtCore import QPoint
+    from PySide6.QtGui import QMouseEvent
+    from PySide6.QtCore import Qt
+
+    pet = CockatielWindow()
+
+    # 1. 待机状态 (面向左 facing_direction == -1)
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    pet.facing_direction = -1
+
+    # 头部与下巴/喉部正向用例 (必须判定为 True)
+    assert pet.is_head_neck_zone(QPoint(24, 45)), "下巴点 (24, 45) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(22, 42)), "嘴壳下沿 (22, 42) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(26, 48)), "下巴下缘 (26, 48) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(30, 50)), "喉部前侧 (30, 50) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(35, 20)), "羽冠部位 (35, 20) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(28, 30)), "眼眶额头 (28, 30) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(20, 36)), "嘴壳中央 (20, 36) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(36, 38)), "腮红脸颊 (36, 38) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(48, 35)), "后颈上方 (48, 35) 应该判定为头颈可摸区域"
+
+    # 躯干禁区反向用例 (必须判定为 False，触发戳身子生气)
+    assert not pet.is_head_neck_zone(QPoint(65, 40)), "背部羽毛 (65, 40) 应该是身体禁区"
+    assert not pet.is_head_neck_zone(QPoint(60, 52)), "翅膀中段 (60, 52) 应该是身体禁区"
+    assert not pet.is_head_neck_zone(QPoint(80, 55)), "尾羽部位 (80, 55) 应该是身体禁区"
+    assert not pet.is_head_neck_zone(QPoint(45, 65)), "腹部下方 (45, 65) 应该是身体禁区"
+
+    # 2. 镜像朝右状态 (facing_direction == 1)
+    pet.facing_direction = 1
+    # 朝右时，下巴镜像位置在 100 - 1 - 24 = 75
+    assert pet.is_head_neck_zone(QPoint(75, 45)), "朝右时下巴点 (75, 45) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(73, 48)), "朝右时下巴点 (73, 48) 应该判定为头颈可摸区域"
+    # 朝右时，背部镜像位置在 100 - 1 - 65 = 34
+    assert not pet.is_head_neck_zone(QPoint(34, 40)), "朝右时背部 (34, 40) 应该是身体禁区"
+    assert not pet.is_head_neck_zone(QPoint(39, 52)), "朝右时翅膀 (39, 52) 应该是身体禁区"
+
+    # 3. 低头享受姿态 (COMFORT_BOW): 头部深低前探
+    pet.facing_direction = -1
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 4.0)
+    assert pet.is_head_neck_zone(QPoint(18, 48)), "低头姿势下巴 (18, 48) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(22, 54)), "低头姿势喉咙 (22, 54) 应该判定为头颈可摸区域"
+    assert pet.is_head_neck_zone(QPoint(26, 56)), "低头姿势喉部下段 (26, 56) 应该判定为头颈可摸区域"
+    assert not pet.is_head_neck_zone(QPoint(60, 45)), "低头姿势背部 (60, 45) 应该是身体禁区"
+
+    # 4. 真实点击事件交互流测试
+    # 4.1 点击下巴 (28, 45 为下巴可视羽毛) -> 触发摸头享受 (COMFORT_BOW)
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    pet.facing_direction = -1
+    chin_event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPoint(28, 45), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    pet.mousePressEvent(chin_event)
+    assert pet.current_behavior.code == BehaviorType.COMFORT_BOW, f"点击下巴应触发 COMFORT_BOW，实际为 {pet.current_behavior.code}"
+    assert pet.pending_next_behavior == BehaviorType.COMFORT_PREEN, "摸头后应预设理毛"
+
+    # 4.2 点击背部 -> 触发戳身子生气反击 (FRIGHT_BITE)
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    body_event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPoint(65, 40), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    pet.mousePressEvent(body_event)
+    assert pet.current_behavior.code == BehaviorType.FRIGHT_BITE, f"戳背部应触发 FRIGHT_BITE，实际为 {pet.current_behavior.code}"
+
+    pet.close()
+    print("PASS: test_head_chin_hit_zone")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
     test_yawn_behavior_flow()
     test_waddle_dual_mode_behavior()
     test_sprite_integrity()
+    test_head_chin_hit_zone()
     print("ALL TESTS PASSED!")

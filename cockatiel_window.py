@@ -8,11 +8,12 @@ from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QRect
 from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
-from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip
+from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBox, QProgressDialog
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS
 from config import get_base_dir, is_dev_mode
 from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
+from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_updater_and_exit, APP_VERSION
 
 class CockatielWindow(QWidget):
     """原始灰玄凤鹦鹉主桌宠窗口 (透明通道、无边框、置顶)"""
@@ -59,6 +60,11 @@ class CockatielWindow(QWidget):
         self.hover_head_start_time: Optional[float] = None
         self.pending_next_behavior: Optional[BehaviorType] = None
         self.yawn_remaining_repeats: int = 0
+
+        # 在线自动更新控制器
+        self._update_checker: Optional[CheckUpdateWorker] = None
+        self._update_downloader: Optional[DownloadUpdateWorker] = None
+        self._download_dialog: Optional[QProgressDialog] = None
 
         # 摸头互动与阶梯概率理毛引擎 (点1下20%, 点2下30%, 点3下40%...)
         self.head_pet_count: int = 0          # 摸头累计点击次数
@@ -225,6 +231,126 @@ class CockatielWindow(QWidget):
         self.update()
         if self.hud_window:
             self.hud_window.update()
+
+    # -------------------------------------------------------------
+    # 在线检查更新与全量升级核心逻辑
+    # -------------------------------------------------------------
+    def check_for_updates(self):
+        """手动触发在线版本检查（右键菜单点击触发）"""
+        if self._update_checker and self._update_checker.isRunning():
+            return
+        self.last_feedback = "正在连接 GitHub 检查最新版本..."
+        self._update_checker = CheckUpdateWorker(self)
+        self._update_checker.check_finished.connect(self.on_check_update_finished)
+        self._update_checker.start()
+
+    def on_check_update_finished(self, success: bool, info: dict, error_msg: str):
+        self._update_checker = None
+        if not success:
+            self.last_feedback = "检查更新失败"
+            QMessageBox.warning(self, "检查更新", f"检查更新遇到问题：\n{error_msg}\n\n请检查网络连接后重试。")
+            return
+
+        has_update = info.get("has_update", False)
+        cloud_tag = info.get("tag_name", "")
+        if not has_update:
+            self.last_feedback = f"当前已是最新版 ({APP_VERSION})"
+            QMessageBox.information(
+                self,
+                "检查更新",
+                f"当前已是最新版本 ({APP_VERSION})！\n\n小玄凤状态绝佳，暂无可用新版本~"
+            )
+            return
+
+        # 发现新版本，弹出更新询问对话框
+        self.last_feedback = f"发现新版本: {cloud_tag}！"
+        title = info.get("title", "") or cloud_tag
+        body = info.get("body", "") or "优化了体验并修复已知问题。"
+        size_mb = info.get("size_bytes", 0) / (1024 * 1024)
+        size_str = f"约 {size_mb:.1f} MB" if size_mb > 0 else "未知大小"
+
+        msg_box = QMessageBox(self)
+        msg_box.setWindowTitle("发现小玄凤新版本！")
+        msg_box.setIcon(QMessageBox.Information)
+        body_html = body.replace("\r\n", "\n").replace("\n", "<br>")
+        msg_text = (
+            f"<h3>🐤 发现新版本：{cloud_tag}</h3>"
+            f"<p><b>当前版本</b>：{APP_VERSION}<br>"
+            f"<b>最新版本</b>：{cloud_tag} (安装包{size_str})</p>"
+            f"<p><b>【更新说明】</b><br>{body_html}</p>"
+            f"<p>是否立即下载新版本并自动更新？</p>"
+        )
+        msg_box.setText(msg_text)
+        btn_update = msg_box.addButton("立即更新", QMessageBox.AcceptRole)
+        btn_cancel = msg_box.addButton("稍后再说", QMessageBox.RejectRole)
+        msg_box.setDefaultButton(btn_update)
+        msg_box.exec()
+
+        if msg_box.clickedButton() == btn_update:
+            self.start_download_update(info)
+
+    def start_download_update(self, info: dict):
+        download_url = info.get("download_url", "")
+        if not download_url:
+            QMessageBox.warning(self, "更新错误", "未能从最新发布包中找到可供下载的安装包附件，请稍后再试。")
+            return
+
+        expected_size = info.get("size_bytes", 0)
+        cloud_tag = info.get("tag_name", "")
+
+        # 初始化下载进度弹窗
+        self._download_dialog = QProgressDialog(f"正在准备下载新版本 {cloud_tag}...", "取消", 0, 100, self)
+        self._download_dialog.setWindowTitle(f"下载更新包 ({cloud_tag})")
+        self._download_dialog.setWindowModality(Qt.WindowModal)
+        self._download_dialog.setMinimumDuration(0)
+        self._download_dialog.setValue(0)
+        self._download_dialog.canceled.connect(self.cancel_download_update)
+        self._download_dialog.show()
+
+        self._update_downloader = DownloadUpdateWorker(download_url, expected_size)
+        self._update_downloader.progress.connect(self.on_download_progress)
+        self._update_downloader.finished.connect(self.on_download_finished)
+        self._update_downloader.start()
+
+    def on_download_progress(self, percent: int, downloaded: int, total: int):
+        if self._download_dialog and self._download_dialog.isVisible():
+            self._download_dialog.setValue(percent)
+            d_mb = downloaded / (1024 * 1024)
+            t_mb = total / (1024 * 1024)
+            if total > 0:
+                self._download_dialog.setLabelText(f"正在下载全量安装包... {percent}%\n({d_mb:.1f} MB / {t_mb:.1f} MB)")
+            else:
+                self._download_dialog.setLabelText(f"正在下载全量安装包... 已下载 {d_mb:.1f} MB")
+
+    def cancel_download_update(self):
+        if self._update_downloader:
+            self._update_downloader.cancel()
+        self.last_feedback = "已取消下载更新"
+
+    def on_download_finished(self, success: bool, zip_path: str, error_msg: str):
+        if self._download_dialog:
+            self._download_dialog.close()
+            self._download_dialog = None
+        self._update_downloader = None
+
+        if not success:
+            if "取消" not in error_msg:
+                QMessageBox.critical(self, "下载失败", f"更新包下载失败：\n{error_msg}\n\n请稍后重试。")
+            return
+
+        # 下载完成，询问用户是否立即重启更新
+        reply = QMessageBox.question(
+            self,
+            "下载完成",
+            "小玄凤新版本安装包已下载完成！\n\n需要重启桌宠以完成自动解压与覆盖更新。\n是否立即重启小玄凤？",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes
+        )
+        if reply == QMessageBox.Yes:
+            self.last_feedback = "正在启动独立更新器并重启..."
+            launch_updater_and_exit(zip_path)
+        else:
+            self.last_feedback = "更新包已保存，下次启动前可随时更新"
 
     def _idle_elapsed_ms(self) -> float:
         return (time.monotonic() - self._idle_t0) * 1000.0
@@ -1133,7 +1259,9 @@ class CockatielWindow(QWidget):
             act_reset = None
 
         menu.addSeparator()
-        # 5. 退出
+        # 5. 检查更新
+        act_check_update = menu.addAction(f"🚀 检查更新 (当前 {APP_VERSION})...")
+        # 6. 退出
         act_quit = menu.addAction("❌ 告别退出")
 
         res = menu.exec(global_pos)
@@ -1213,6 +1341,8 @@ class CockatielWindow(QWidget):
             self.mood.sleep_cooldown_until = 0.0
             self.mood.last_head_pet_time = float("-inf")
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "心态平复回原点")
+        elif res == act_check_update:
+            self.check_for_updates()
         elif res == act_quit:
             QApplication.quit()
 

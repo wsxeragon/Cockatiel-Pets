@@ -500,6 +500,39 @@ def test_head_pet_probabilistic_preen_flow():
     pet.close()
     print("PASS: test_head_pet_probabilistic_preen_flow")
 
+def test_updater_version_and_integration():
+    import updater
+    from config import APP_VERSION
+
+    # 1. 验证版本号纯数字定义（无 V 前缀）
+    assert APP_VERSION == "0.0.6", f"APP_VERSION should be '0.0.6', got {APP_VERSION}"
+    assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
+
+    # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
+    assert updater.normalize_version("V0.0.6") == (0, 0, 6)
+    assert updater.normalize_version("0.0.6") == (0, 0, 6)
+    assert updater.normalize_version("v0.0.5") == (0, 0, 5)
+    assert updater.normalize_version("V0.0.10") == (0, 0, 10)
+    assert updater.is_newer_version("V0.0.6", "0.0.6") is False
+    assert updater.is_newer_version("0.0.6", "0.0.6") is False
+    assert updater.is_newer_version("V0.0.5", "0.0.6") is False
+    assert updater.is_newer_version("V0.0.7", "0.0.6") is True
+    assert updater.is_newer_version("0.0.7", "0.0.6") is True
+    assert updater.is_newer_version("V0.1.0", "0.0.6") is True
+    assert updater.is_newer_version("V1.0.0", "0.0.6") is True
+
+    # 3. 验证窗口集成
+    app = QApplication.instance()
+    if not app:
+        app = QApplication(sys.argv)
+    from cockatiel_window import CockatielWindow
+    win = CockatielWindow()
+    assert hasattr(win, "check_for_updates"), "CockatielWindow must have check_for_updates"
+    assert hasattr(win, "on_check_update_finished"), "CockatielWindow must have on_check_update_finished"
+    assert hasattr(win, "start_download_update"), "CockatielWindow must have start_download_update"
+    win.close()
+    print("PASS: test_updater_version_and_integration")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
@@ -509,4 +542,5 @@ if __name__ == "__main__":
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()
+    test_updater_version_and_integration()
     print("ALL TESTS PASSED!")

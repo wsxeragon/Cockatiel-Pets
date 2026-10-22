@@ -53,12 +53,17 @@ class CockatielWindow(QWidget):
         self._next_twitch: float = 0.0
         self._next_crest: float = 0.0
 
-        # 鼠标拖拽状态与预定待执行行为 (例如摸头后固定衔接理毛)
+        # 鼠标拖拽状态与预定待执行行为
         self.is_dragging: bool = False
         self.drag_start_pos: QPoint = QPoint()
         self.hover_head_start_time: Optional[float] = None
         self.pending_next_behavior: Optional[BehaviorType] = None
         self.yawn_remaining_repeats: int = 0
+
+        # 摸头互动与阶梯概率理毛引擎 (点1下20%, 点2下30%, 点3下40%...)
+        self.head_pet_count: int = 0          # 摸头累计点击次数
+        self.head_pet_active: bool = False    # 标记当前是否处于摸头等待后续动作状态
+        self.last_head_pet_time: float = 0.0  # 上次摸头时间戳 (用于连击间隔判定与超时重置)
 
         # 飞行平滑位移引擎
         self.is_flying: bool = False
@@ -348,6 +353,9 @@ class CockatielWindow(QWidget):
         elif new_b_def.code != BehaviorType.COMFORT_BOW:
             self.pending_next_behavior = None
 
+        if new_b_def.code not in (BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_PREEN):
+            self.head_pet_active = False
+
         # 打哈欠连击计数清理 (切入非打哈欠动作时归零)
         if new_b_def.code != BehaviorType.COMFORT_YAWN:
             self.yawn_remaining_repeats = 0
@@ -395,6 +403,9 @@ class CockatielWindow(QWidget):
         if self.current_behavior.code not in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
         now = time.time()
+        self.pending_next_behavior = None
+        self.head_pet_active = False
+        self.head_pet_count = 0
         self.mood.sleep_cooldown_until = now + 90.0
         self.mood.last_interaction_time = now
         # 用户手动唤醒或交互吵醒时：适度调降疲劳度 (降至 75.0)，避免依然卡在 >=90% 临界高位导致刚醒来就秒睡
@@ -708,14 +719,35 @@ class CockatielWindow(QWidget):
                     self.hud_window.update_view()
                 return
 
-            # 仅当存在预设动作 (即鼠标点击了摸头后) 才固定衔接理毛
+            # 1. 显式预设动作 (如有外部调用设置) 优先消费
             if self.pending_next_behavior:
                 next_code = self.pending_next_behavior
                 self.pending_next_behavior = None
-                self.switch_behavior(BEHAVIOR_CATALOG[next_code], None, "摸头享受完毕，开始整理凌乱羽毛~")
+                self.switch_behavior(BEHAVIOR_CATALOG[next_code], None, f"执行预设动作: {BEHAVIOR_CATALOG[next_code].name_cn}")
                 if self.hud_window:
                     self.hud_window.update_view()
                 return
+
+            # 2. 摸头后衔接动作：概率性触发转头理毛 (COMFORT_PREEN)
+            # 规则：点一下 20%，点两下 30%，点三下 40%... 该概率只影响摸头后的这一个动作
+            if getattr(self, 'head_pet_active', False):
+                self.head_pet_active = False
+                prob = self.get_head_pet_preen_prob()
+                if random.random() < prob:
+                    # 概率命中理毛：理毛后清空摸头累计次数
+                    self.head_pet_count = 0
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_PREEN], None,
+                                         "摸头享受完毕，开始整理凌乱羽毛~")
+                    if self.hud_window:
+                        self.hud_window.update_view()
+                    return
+                else:
+                    # 未命中理毛：该概率只影响摸头后的这一个动作，后续动作恢复正常发呆
+                    self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0,
+                                         "摸头享受完毕，惬意站立发呆~")
+                    if self.hud_window:
+                        self.hud_window.update_view()
+                    return
 
             # 理毛 (COMFORT_PREEN) 结束后：30% 概率触发伸脖打哈欠，连打 3~5 次
             if self.current_behavior.code == BehaviorType.COMFORT_PREEN:
@@ -879,19 +911,42 @@ class CockatielWindow(QWidget):
     def mouseDoubleClickEvent(self, event):
         self.mousePressEvent(event)
 
+    def get_head_pet_preen_prob(self) -> float:
+        """计算摸头后下个动作触发理毛的概率：点1下20%，点2下30%，点3下40%... 以此类推 (上限100%)"""
+        if self.head_pet_count <= 0:
+            return 0.0
+        return min(1.0, 0.20 + (self.head_pet_count - 1) * 0.10)
+
     def handle_pet_head(self):
-        """摸头交互：固定切入低头享受动作，结束后固定衔接转头理毛"""
+        """摸头交互：切入低头享受动作，结束后概率性衔接转头理毛 (点1下20%, 点2下30%, 点3下40%...)
+        该概率只影响摸头后的下一个动作。
+        """
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("被轻轻摸醒了")
+
+        now = time.time()
+        # 如果先前正在理毛，或者距上次摸头超过 15 秒且非当前低头动作，重置累计次数
+        if self.current_behavior.code == BehaviorType.COMFORT_PREEN or (
+            self.current_behavior.code != BehaviorType.COMFORT_BOW and (now - self.last_head_pet_time > 15.0)
+        ):
+            self.head_pet_count = 0
+
+        self.head_pet_count += 1
+        self.head_pet_active = True
+        self.last_head_pet_time = now
+        self.pending_next_behavior = None  # 不再硬编码必触发理毛
+
         d_co, _, msg = self.mood.pet_head()
-        # 预设摸头结束后固定衔接转头理毛 (COMFORT_PREEN)
-        self.pending_next_behavior = BehaviorType.COMFORT_PREEN
-        # 摸头动作固定切入低头闭眼享受 (COMFORT_BOW)，持续 4.0 秒
-        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 4.0, msg)
+        feedback_msg = msg
+
+        # 摸头动作切入低头闭眼享受 (COMFORT_BOW)，持续 4.0 秒
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], 4.0, feedback_msg)
 
     def handle_touch_body(self):
         """戳身体禁区"""
         self.pending_next_behavior = None
+        self.head_pet_active = False
+        self.head_pet_count = 0
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("被戳醒了！")
         panic, msg = self.mood.touch_body()
@@ -908,6 +963,8 @@ class CockatielWindow(QWidget):
         if self.is_flying:
             return
         self.pending_next_behavior = None
+        self.head_pet_active = False
+        self.head_pet_count = 0
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             self.wake_up("惊醒起飞")
         rect = self.get_screen_rect(use_available=True)

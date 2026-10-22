@@ -366,7 +366,9 @@ def test_head_chin_hit_zone():
     chin_event = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPoint(28, 45), Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
     pet.mousePressEvent(chin_event)
     assert pet.current_behavior.code == BehaviorType.COMFORT_BOW, f"点击下巴应触发 COMFORT_BOW，实际为 {pet.current_behavior.code}"
-    assert pet.pending_next_behavior == BehaviorType.COMFORT_PREEN, "摸头后应预设理毛"
+    assert pet.head_pet_active is True, "摸头后应标记 head_pet_active 为 True"
+    assert pet.head_pet_count == 1, "摸头 1 次计数应为 1"
+    assert abs(pet.get_head_pet_preen_prob() - 0.20) < 1e-5, "摸头 1 次理毛概率应为 20%"
 
     # 4.2 点击背部 -> 触发戳身子生气反击 (FRIGHT_BITE)
     pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
@@ -416,6 +418,88 @@ def test_sleep_unmirrored_z_both_directions():
     pet.close()
     print("PASS: test_sleep_unmirrored_z_both_directions")
 
+def test_head_pet_probabilistic_preen_flow():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    import unittest.mock as mock
+
+    pet = CockatielWindow()
+
+    # 1. 验证梯度递增概率公式：点1下20%, 点2下30%, 点3下40%... 9下及以上100%
+    pet.head_pet_count = 0
+    assert pet.get_head_pet_preen_prob() == 0.0
+    pet.head_pet_count = 1
+    assert abs(pet.get_head_pet_preen_prob() - 0.20) < 1e-5
+    pet.head_pet_count = 2
+    assert abs(pet.get_head_pet_preen_prob() - 0.30) < 1e-5
+    pet.head_pet_count = 3
+    assert abs(pet.get_head_pet_preen_prob() - 0.40) < 1e-5
+    pet.head_pet_count = 4
+    assert abs(pet.get_head_pet_preen_prob() - 0.50) < 1e-5
+    pet.head_pet_count = 9
+    assert abs(pet.get_head_pet_preen_prob() - 1.00) < 1e-5
+    pet.head_pet_count = 12
+    assert abs(pet.get_head_pet_preen_prob() - 1.00) < 1e-5
+
+    # 2. 模拟连续点击摸头 3 次
+    pet.head_pet_count = 0
+    pet.handle_pet_head()
+    assert pet.head_pet_count == 1
+    assert pet.current_behavior.code == BehaviorType.COMFORT_BOW
+    assert pet.head_pet_active is True
+    assert abs(pet.get_head_pet_preen_prob() - 0.20) < 1e-5
+
+    pet.handle_pet_head()
+    assert pet.head_pet_count == 2
+    assert abs(pet.get_head_pet_preen_prob() - 0.30) < 1e-5
+
+    pet.handle_pet_head()
+    assert pet.head_pet_count == 3
+    assert abs(pet.get_head_pet_preen_prob() - 0.40) < 1e-5
+
+    # 3. 验证命中理毛分支 (random < 0.40 时触发理毛)
+    assert "概率" not in pet.last_feedback and "%" not in pet.last_feedback, "摸头反馈中不应暴露概率信息"
+    pet.action_end_time = time.time() - 0.1
+    with mock.patch("random.random", return_value=0.35):
+        pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.COMFORT_PREEN, "命中概率应触发转头理毛"
+    assert pet.head_pet_active is False, "触发理毛后 head_pet_active 应清空"
+    assert pet.head_pet_count == 0, "触发理毛后摸头累计应清零"
+    assert "概率" not in pet.last_feedback and "%" not in pet.last_feedback, "理毛触发反馈中不应暴露概率信息"
+
+    # 4. 验证未命中理毛分支 (点1下 20%，random >= 0.20 时不触发理毛，转入发呆)
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    pet.handle_pet_head()
+    assert pet.head_pet_count == 1
+    assert abs(pet.get_head_pet_preen_prob() - 0.20) < 1e-5
+    assert "概率" not in pet.last_feedback and "%" not in pet.last_feedback, "摸头反馈中不应暴露概率信息"
+
+    pet.action_end_time = time.time() - 0.1
+    with mock.patch("random.random", return_value=0.25):
+        pet.on_main_tick()
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK, "未命中理毛应平稳切入发呆站立"
+    assert pet.head_pet_active is False, "摸头后单次动作判定完毕，head_pet_active 必须置为 False"
+    assert "概率" not in pet.last_feedback and "%" not in pet.last_feedback, "未触发理毛反馈中不应暴露概率信息"
+
+    # 5. 验证“该概率只影响摸头后的下一个动作”：后续自主轮转不受影响
+    pet.action_end_time = time.time() - 0.1
+    with mock.patch("random.random", return_value=0.01):
+        pet.on_main_tick()
+    assert pet.head_pet_active is False
+
+    # 6. 验证戳身体清零摸头计数
+    pet.handle_pet_head()
+    assert pet.head_pet_count > 0
+    pet.handle_touch_body()
+    assert pet.head_pet_count == 0
+    assert pet.head_pet_active is False
+
+    pet.close()
+    print("PASS: test_head_pet_probabilistic_preen_flow")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
@@ -424,4 +508,5 @@ if __name__ == "__main__":
     test_sprite_integrity()
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
+    test_head_pet_probabilistic_preen_flow()
     print("ALL TESTS PASSED!")

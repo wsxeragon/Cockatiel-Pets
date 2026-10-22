@@ -60,7 +60,8 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
     BehaviorType.IDLE_WADDLE: BehaviorDef(
         BehaviorType.IDLE_WADDLE, "摇晃溜达(走来走去)", 55.0, -0.2, 0.2, 0.1, 300.0, 20.0,
-        ["waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5"], frame_interval_ms=130
+        ["waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4",
+         "waddle_5", "waddle_6", "waddle_7"], frame_interval_ms=120
     ),
     BehaviorType.IDLE_PECK: BehaviorDef(
         BehaviorType.IDLE_PECK, "闲置自然啄食", 15.0, -0.3, 0.0, 0.1, 30.0, 3.0,

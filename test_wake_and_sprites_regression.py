@@ -31,8 +31,10 @@ def test_models_definitions():
     assert fluff_def.frame_interval_ms == 900, f"COMFORT_FLUFF frame_interval_ms mismatch: {fluff_def.frame_interval_ms}"
 
     waddle_def = BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE]
-    assert waddle_def.frames == ["waddle_0", "waddle_1", "waddle_2", "waddle_3", "waddle_4", "waddle_5"], f"IDLE_WADDLE frames mismatch: {waddle_def.frames}"
-    assert waddle_def.frame_interval_ms == 130, f"IDLE_WADDLE frame_interval_ms mismatch: {waddle_def.frame_interval_ms}"
+    assert waddle_def.frames == ["waddle_0", "waddle_1", "waddle_2", "waddle_3",
+                                  "waddle_4", "waddle_5", "waddle_6", "waddle_7"], \
+        f"IDLE_WADDLE frames mismatch: {waddle_def.frames}"
+    assert waddle_def.frame_interval_ms == 120, f"IDLE_WADDLE frame_interval_ms mismatch: {waddle_def.frame_interval_ms}"
     print("PASS: test_models_definitions")
 
 def test_wake_no_flicker_flow():
@@ -293,6 +295,17 @@ def test_sprite_integrity():
         assert img_c.size == (100, 80), f"Size mismatch for {p_classic}: {img_c.size}"
         assert img_t.size == (100, 80), f"Size mismatch for {p_triple}: {img_t.size}"
         assert img_2.size == (100, 80), f"Size mismatch for {p_2d}: {img_2.size}"
+
+    # The active runtime sets (classic/triple) use the new 8-frame walk and
+    # the relayered idle blink/relaxed/breath-down variants.
+    for s in ("waddle_6", "waddle_7",
+              "idle_0", "idle_1", "idle_2",
+              "idle_0_dn", "idle_1_dn", "idle_2_dn"):
+        for d in ("assets/sprites_classic", "assets/sprites_triple"):
+            p = Path(d) / f"{s}.png"
+            assert p.exists(), f"Missing {p}"
+            img = Image.open(p)
+            assert img.size == (100, 80), f"Size mismatch for {p}: {img.size}"
 
     print("PASS: test_sprite_integrity")
 

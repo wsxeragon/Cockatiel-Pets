@@ -41,15 +41,20 @@ def main():
     if os.path.exists(icon_path):
         app.setWindowIcon(QIcon(icon_path))
 
-    # 创建玄凤桌面宠物主窗口
-    pet = CockatielWindow()
+    # 创建玄凤桌面宠物主窗口（开启屏幕外呼啸飞入出场动画）
+    pet = CockatielWindow(start_with_fly_in=True)
 
     # 创建四维心态雷达图监视器
     hud = RadarHUD(pet)
     pet.set_hud(hud)
 
-    # 放置雷达监视器在桌宠旁边
-    hud.move(max(20, pet.x() - 340), max(20, pet.y() - 280))
+    # 放置雷达监视器在桌宠目标降落点周边（确保安全置于可用屏幕内）
+    rect = pet.get_screen_rect(use_available=True)
+    target_x = int(pet.fly_target_pos.x()) if pet.is_flying else pet.x()
+    target_y = int(pet.fly_target_pos.y()) if pet.is_flying else pet.y()
+    hud_x = max(rect.left() + 20, min(rect.right() - hud.width() - 20, target_x - 340 if target_x > rect.left() + 360 else target_x + 120))
+    hud_y = max(rect.top() + 20, min(rect.bottom() - hud.height() - 20, target_y - 280))
+    hud.move(hud_x, hud_y)
 
     pet.show()
     hud.show()

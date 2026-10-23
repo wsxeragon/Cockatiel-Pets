@@ -18,8 +18,9 @@ from poop_item_window import PoopItemWindow
 
 class CockatielWindow(QWidget):
     """原始灰玄凤鹦鹉主桌宠窗口 (透明通道、无边框、置顶)"""
-    def __init__(self):
+    def __init__(self, start_with_fly_in: bool = False):
         super().__init__()
+        self.is_exiting: bool = False # 退出离场飞行标记
         # 窗口属性: 无边框、置顶、桌面工具窗口 (不占用任务栏大窗口)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
@@ -133,6 +134,10 @@ class CockatielWindow(QWidget):
         init_y = rect.bottom() - self.height() - 20
         self.safe_move(init_x, init_y, margin=10)
 
+        # 若开启开机飞入动画，立即执行屏幕外入场飞行动力学
+        if start_with_fly_in:
+            self.start_fly_in()
+
     def get_screen_rect(self, use_available: bool = True) -> QRect:
         """获取桌宠当前所在屏幕的可视安全矩形 (适配多显示器与Windows任务栏)"""
         pet_center = self.geometry().center()
@@ -191,6 +196,9 @@ class CockatielWindow(QWidget):
 
     def ensure_on_screen(self, margin: int = 10):
         """保底卫士：如果当前桌宠超出屏幕可视区域，立即平滑拉回屏幕内"""
+        # 飞行中或退出离场中不强制纠偏，避免打断飞翔抛物线
+        if self.is_flying or getattr(self, "is_exiting", False):
+            return
         rect = self.get_screen_rect(use_available=True)
         cur_geom = self.geometry()
         safe_rect = QRect(rect.left() + margin, rect.top() + margin,
@@ -1445,6 +1453,8 @@ class CockatielWindow(QWidget):
         self.update_head_hover(local_pos=pos, now=now)
 
     def mousePressEvent(self, event):
+        if self.is_flying or getattr(self, "is_exiting", False):
+            return
         if event.button() == Qt.LeftButton:
             pos = event.position().toPoint()
             # Any click on the pet window is enough to wake a sleeping bird,
@@ -1611,14 +1621,160 @@ class CockatielWindow(QWidget):
 
         self.fly_timer.start(25) # 40 FPS 平滑插值
 
+    def start_fly_in(self, target_pos: Optional[QPointF] = None, entry_side: Optional[str] = None):
+        """
+        开机启动入场动画：玄凤从屏幕外飞入桌面，随机寻找落脚点降落
+        """
+        if self.is_flying:
+            return
+
+        self.pending_next_behavior = None
+        self.head_pet_active = False
+        self.head_pet_count = 0
+
+        rect = self.get_screen_rect(use_available=True)
+        w, h = self.width(), self.height()
+
+        # 1. 随机决定落脚点 (桌面舒适可视区域，靠中下部)
+        if target_pos is not None:
+            tx = float(target_pos.x())
+            ty = float(target_pos.y())
+        else:
+            tx = float(random.randint(rect.left() + 60, max(rect.left() + 60, rect.right() - w - 60)))
+            y_min = max(rect.top() + 60, rect.bottom() - 260)
+            y_max = max(y_min, rect.bottom() - h - 25)
+            ty = float(random.randint(y_min, y_max))
+
+        self.fly_target_pos = QPointF(tx, ty)
+
+        # 2. 随机决定屏幕外出发点 (从天际上方、左上或右上等屏幕外区域滑翔入场)
+        side = entry_side if entry_side else random.choice(["top_sky", "top_left", "top_right", "left", "right"])
+        if side == "top_sky":
+            sx = tx + random.choice([-1, 1]) * random.randint(120, 260)
+            sy = float(rect.top() - h - random.randint(40, 90))
+        elif side == "top_left":
+            sx = float(rect.left() - w - random.randint(30, 80))
+            sy = float(rect.top() - h - random.randint(20, 50))
+        elif side == "top_right":
+            sx = float(rect.right() + random.randint(30, 80))
+            sy = float(rect.top() - h - random.randint(20, 50))
+        elif side == "left":
+            sx = float(rect.left() - w - random.randint(30, 70))
+            sy = float(random.randint(rect.top() + 40, max(rect.top() + 40, int(ty) - 60)))
+        else: # "right"
+            sx = float(rect.right() + random.randint(30, 70))
+            sy = float(random.randint(rect.top() + 40, max(rect.top() + 40, int(ty) - 60)))
+
+        self.fly_start_pos = QPointF(sx, sy)
+        self.move(int(sx), int(sy))
+
+        # 3. 飞行朝向面向目标落脚点
+        dx = tx - sx
+        self.facing_direction = 1 if dx > 0 else -1
+        self.waddle_direction = self.facing_direction
+        self.update()
+
+        # 4. 二阶贝塞尔曲线控制点 (自然俯冲并优雅拉起降落)
+        mid_x = (sx + tx) / 2.0
+        mid_y = min(sy, ty) - random.randint(30, 80)
+        self.fly_control_pos = QPointF(mid_x, mid_y)
+
+        # 5. 启动入场飞行
+        self.is_flying = True
+        self.flight_purpose = "fly_in"
+        dist = math.hypot(tx - sx, ty - sy)
+        self.fly_duration = max(1.4, min(2.0, dist / 340.0))
+        self.fly_progress = 0.0
+
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_FLY], self.fly_duration + 0.5, "从屏幕外挥翅飞入，寻找落脚点~")
+        self.fly_timer.start(25) # 40 FPS
+
+    def start_fly_out_and_quit(self, exit_dir: Optional[int] = None):
+        """
+        关闭退出离场动画：点击告别退出时，玄凤直接向上掠起飞出屏幕外，然后退出程序
+        """
+        if getattr(self, "is_exiting", False):
+            return
+        self.is_exiting = True
+
+        # 若在睡眠中则立刻唤醒
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+            self.wake_up("跟主人告别，准备飞走~")
+
+        # 隐藏 HUD 窗口与浮窗
+        if self.hud_window:
+            self.hud_window.hide()
+
+        # 清除摸头/交互状态
+        self.head_pet_active = False
+        self.head_pet_count = 0
+        self.is_dragging = False
+
+        rect = self.get_screen_rect(use_available=True)
+        w, h = self.width(), self.height()
+        cur_x = float(self.x())
+        cur_y = float(self.y())
+
+        # 起点为当前位置
+        self.fly_start_pos = QPointF(cur_x, cur_y)
+
+        # 终点为屏幕外上方（向上方天空飞离屏幕）
+        mid_screen_x = (rect.left() + rect.right()) / 2.0
+        if exit_dir is not None:
+            fly_dir = exit_dir
+        else:
+            fly_dir = 1 if cur_x < mid_screen_x else -1
+
+        out_x = cur_x + fly_dir * random.randint(180, 360)
+        out_y = float(rect.top() - h - random.randint(40, 80))
+        self.fly_target_pos = QPointF(out_x, out_y)
+
+        # 朝向飞行方向
+        dx = out_x - cur_x
+        self.facing_direction = 1 if dx > 0 else -1
+        self.waddle_direction = self.facing_direction
+        self.update()
+
+        # 贝塞尔控制点：向上弧度掠起起飞
+        c_x = (cur_x + out_x) / 2.0
+        c_y = min(cur_y, out_y) - random.randint(40, 80)
+        self.fly_control_pos = QPointF(c_x, c_y)
+
+        self.is_flying = True
+        self.flight_purpose = "fly_out"
+        self.fly_duration = 1.3
+        self.fly_progress = 0.0
+
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_FLY], 3.0, "告别主人，挥翅飞向远方~")
+        self.fly_timer.start(25)
+
     def on_fly_step(self):
         step = 0.025 / self.fly_duration
         self.fly_progress += step
         if self.fly_progress >= 1.0:
             self.fly_progress = 1.0
-            self.safe_move(int(self.fly_target_pos.x()), int(self.fly_target_pos.y()), margin=10)
             self.fly_timer.stop()
             self.is_flying = False
+
+            if self.flight_purpose == "fly_out":
+                # 告别飞出屏幕完全离开，立即安全退出程序
+                self.hide()
+                if hasattr(self, "_on_fly_out_finished"):
+                    self._on_fly_out_finished()
+                else:
+                    QApplication.quit()
+                return
+
+            if self.flight_purpose == "fly_in":
+                # 飞入屏幕安全降落
+                self.safe_move(int(self.fly_target_pos.x()), int(self.fly_target_pos.y()), margin=10)
+                landing_action = random.choice([BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF, BehaviorType.IDLE_BLINK])
+                self.switch_behavior(BEHAVIOR_CATALOG[landing_action], 2.0, "顺利飞到桌面，开心降落找你玩~")
+                if self.hud_window:
+                    self.hud_window.update_view()
+                return
+
+            self.safe_move(int(self.fly_target_pos.x()), int(self.fly_target_pos.y()), margin=10)
             # 落地动作
             if self.flight_purpose == "panic" or self.mood.fright > 40.0:
                 self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.FRIGHT_ALERT], 3.0, "惊险降落，警惕拉直身子")
@@ -1632,7 +1788,12 @@ class CockatielWindow(QWidget):
         t = self.fly_progress
         bx = (1 - t)**2 * self.fly_start_pos.x() + 2 * t * (1 - t) * self.fly_control_pos.x() + t**2 * self.fly_target_pos.x()
         by = (1 - t)**2 * self.fly_start_pos.y() + 2 * t * (1 - t) * self.fly_control_pos.y() + t**2 * self.fly_target_pos.y()
-        self.safe_move(int(bx), int(by), margin=5)
+
+        if self.flight_purpose in ("fly_in", "fly_out"):
+            # 屏幕内外飞入/飞出：允许越过屏幕边缘进行真·屏幕外出入
+            self.move(int(bx), int(by))
+        else:
+            self.safe_move(int(bx), int(by), margin=5)
 
     def show_context_menu(self, global_pos: QPoint):
         menu = QMenu(self)
@@ -1823,7 +1984,7 @@ class CockatielWindow(QWidget):
         elif res == act_check_update:
             self.check_for_updates()
         elif res == act_quit:
-            QApplication.quit()
+            self.start_fly_out_and_quit()
 
     def paintEvent(self, event):
         painter = QPainter(self)

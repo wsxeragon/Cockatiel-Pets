@@ -307,6 +307,31 @@ def test_sprite_integrity():
             img = Image.open(p)
             assert img.size == (100, 80), f"Size mismatch for {p}: {img.size}"
 
+    # Verify play_ball start, landing cushion, and ending frames align with 27-deg standing stance
+    for d in ("assets/sprites_classic", "assets/sprites_triple"):
+        idle = Image.open(Path(d) / "idle_0.png").convert("RGBA")
+        pb0 = Image.open(Path(d) / "play_ball_0.png").convert("RGBA")
+        pb290 = Image.open(Path(d) / "play_ball_290.png").convert("RGBA")
+        pb299 = Image.open(Path(d) / "play_ball_299.png").convert("RGBA")
+        assert pb0.size == (260, 120), f"Size mismatch for play_ball_0 in {d}"
+        assert pb290.size == (260, 120), f"Size mismatch for play_ball_290 in {d}"
+        assert pb299.size == (260, 120), f"Size mismatch for play_ball_299 in {d}"
+
+        # 1. Entry frame 0 bird matches idle_0 at (122, 26)
+        crop_pb0 = pb0.crop((122, 26, 222, 106))
+        diff_0 = sum(1 for y in range(80) for x in range(100) if idle.getpixel((x, y))[3] > 0 and crop_pb0.getpixel((x, y)) != idle.getpixel((x, y)))
+        assert diff_0 == 0, f"play_ball_0 bird pixels mismatch idle_0 in {d}: {diff_0}"
+
+        # 2. Touchdown frame 290 has grounded feet pixels at contact level
+        crop_pb290 = pb290.crop((31, 26, 131, 106))
+        feet_290 = sum(1 for x in range(35, 65) if crop_pb290.getpixel((x, 73))[3] > 0)
+        assert feet_290 > 0, f"play_ball_290 missing grounded cushion feet in {d}"
+
+        # 3. Exit frame 299 bird matches idle_0 at (31, 26)
+        crop_pb299 = pb299.crop((31, 26, 131, 106))
+        diff_299 = sum(1 for y in range(80) for x in range(100) if idle.getpixel((x, y))[3] > 0 and crop_pb299.getpixel((x, y)) != idle.getpixel((x, y)))
+        assert diff_299 == 0, f"play_ball_299 bird pixels mismatch idle_0 in {d}: {diff_299}"
+
     print("PASS: test_sprite_integrity")
 
 def test_head_chin_hit_zone():
@@ -505,21 +530,21 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.0.6", f"APP_VERSION should be '0.0.6', got {APP_VERSION}"
+    assert APP_VERSION == "0.0.7", f"APP_VERSION should be '0.0.7', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
-    assert updater.normalize_version("V0.0.6") == (0, 0, 6)
-    assert updater.normalize_version("0.0.6") == (0, 0, 6)
-    assert updater.normalize_version("v0.0.5") == (0, 0, 5)
+    assert updater.normalize_version("V0.0.7") == (0, 0, 7)
+    assert updater.normalize_version("0.0.7") == (0, 0, 7)
+    assert updater.normalize_version("v0.0.6") == (0, 0, 6)
     assert updater.normalize_version("V0.0.10") == (0, 0, 10)
-    assert updater.is_newer_version("V0.0.6", "0.0.6") is False
-    assert updater.is_newer_version("0.0.6", "0.0.6") is False
-    assert updater.is_newer_version("V0.0.5", "0.0.6") is False
-    assert updater.is_newer_version("V0.0.7", "0.0.6") is True
-    assert updater.is_newer_version("0.0.7", "0.0.6") is True
-    assert updater.is_newer_version("V0.1.0", "0.0.6") is True
-    assert updater.is_newer_version("V1.0.0", "0.0.6") is True
+    assert updater.is_newer_version("V0.0.7", "0.0.7") is False
+    assert updater.is_newer_version("0.0.7", "0.0.7") is False
+    assert updater.is_newer_version("V0.0.6", "0.0.7") is False
+    assert updater.is_newer_version("V0.0.8", "0.0.7") is True
+    assert updater.is_newer_version("0.0.8", "0.0.7") is True
+    assert updater.is_newer_version("V0.1.0", "0.0.7") is True
+    assert updater.is_newer_version("V1.0.0", "0.0.7") is True
 
     # 3. 验证窗口集成
     app = QApplication.instance()

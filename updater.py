@@ -82,10 +82,11 @@ def fetch_latest_release_info(timeout: int = 10) -> Dict[str, Any]:
                 body = latest.get("body", "") or "暂无更新说明"
                 assets = latest.get("assets", [])
 
-                # 寻找全量 zip 发布包 (Cockatiel-Pets-Windows-x64.zip 或任意 .zip)
+                # 寻找更新发布包：优先增量补丁包 / 标准更新包 (Cockatiel-Pets-Windows-x64.zip 或包含 patch)，次选全量安装包
                 target_asset = None
                 for a in assets:
-                    if a.get("name", "").lower() == "cockatiel-pets-windows-x64.zip":
+                    name_lower = a.get("name", "").lower()
+                    if name_lower == "cockatiel-pets-windows-x64.zip" or "patch" in name_lower:
                         target_asset = a
                         break
                 if not target_asset:

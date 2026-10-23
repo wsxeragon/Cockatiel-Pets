@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import zipfile
+from pathlib import Path
 
 def main():
     print("=== [1/4] 开始 PyInstaller 打包流程 ===")
@@ -91,20 +92,53 @@ def main():
     with open(os.path.join(dist_folder, "使用说明.txt"), "w", encoding="utf-8") as f:
         f.write(readme_txt)
 
-    print("=== [4/4] 压缩打包绿色发布 ZIP 文件 ===")
-    zip_filename = os.path.join(dist_root, "Cockatiel-Pets-Windows-x64.zip")
-    if os.path.exists(zip_filename):
-        os.remove(zip_filename)
+    print("=== [4/4] 压缩打包绿色全量包与增量补丁包 ===")
+    from config import APP_VERSION
 
-    with zipfile.ZipFile(zip_filename, "w", zipfile.ZIP_DEFLATED) as zipf:
+    # 1. 全量独立安装包 (含 _internal/ 等全部依赖，约 54MB，供新用户使用)
+    full_zip_name = f"Cockatiel-Pets-v{APP_VERSION}-Full-Setup.zip"
+    full_zip_path = os.path.join(dist_root, full_zip_name)
+    if os.path.exists(full_zip_path):
+        os.remove(full_zip_path)
+
+    print(f"正在压缩全量独立发布包: {full_zip_name} ...")
+    with zipfile.ZipFile(full_zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
         for root, dirs, files in os.walk(dist_folder):
             for file in files:
                 full_path = os.path.join(root, file)
                 rel_path = os.path.relpath(full_path, dist_root)
                 zipf.write(full_path, rel_path)
+    full_size_mb = os.path.getsize(full_zip_path) / (1024 * 1024)
 
-    zip_size_mb = os.path.getsize(zip_filename) / (1024 * 1024)
-    print(f"=== 全部完成！绿色发布包已生成: {zip_filename} ({zip_size_mb:.2f} MB) ===")
+    # 2. 增量热更新补丁包 (排除庞大的 _internal/，仅打包 CockatielPets.exe 与 assets，约 2.4MB)
+    # 命名为 Cockatiel-Pets-Windows-x64.zip，让已安装 0.0.6 的用户在线检查更新时精准命中并秒级下载
+    patch_zip_name = "Cockatiel-Pets-Windows-x64.zip"
+    patch_zip_path = os.path.join(dist_root, patch_zip_name)
+    if os.path.exists(patch_zip_path):
+        os.remove(patch_zip_path)
+
+    print(f"正在压缩增量更新补丁包: {patch_zip_name} ...")
+    with zipfile.ZipFile(patch_zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
+        for root, dirs, files in os.walk(dist_folder):
+            if "_internal" in Path(root).parts:
+                continue
+            for file in files:
+                full_path = os.path.join(root, file)
+                rel_path = os.path.relpath(full_path, dist_root)
+                zipf.write(full_path, rel_path)
+    patch_size_mb = os.path.getsize(patch_zip_path) / (1024 * 1024)
+
+    # 3. 额外生成一个带版本号命名的补丁包备份 (供明确需要按版本号下载补丁的用户)
+    ver_patch_name = f"Cockatiel-Pets-v{APP_VERSION}-Patch-x64.zip"
+    ver_patch_path = os.path.join(dist_root, ver_patch_name)
+    shutil.copy2(patch_zip_path, ver_patch_path)
+
+    print("==================================================")
+    print("=== [SUCCESS] 全部打包完成！ ===")
+    print(f"  1. 增量补丁包 (老用户秒级在线更新): {patch_zip_path} ({patch_size_mb:.2f} MB)")
+    print(f"  2. 全量独立包 (新用户首次解压即用): {full_zip_path} ({full_size_mb:.2f} MB)")
+    print(f"  3. 命名增量包 (备用版本补丁):     {ver_patch_path} ({patch_size_mb:.2f} MB)")
+    print("==================================================")
 
 if __name__ == "__main__":
     main()

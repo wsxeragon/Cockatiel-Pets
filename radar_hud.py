@@ -13,9 +13,9 @@ class RadarHUD(QWidget):
         self.setWindowTitle("🐤 玄凤鹦鹉心理雷达监视器")
         self.dev_mode = is_dev_mode()
         if self.dev_mode:
-            self.setFixedSize(320, 550)
+            self.setFixedSize(320, 560)
         else:
-            self.setFixedSize(320, 370)
+            self.setFixedSize(320, 390)
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
 
@@ -76,10 +76,6 @@ class RadarHUD(QWidget):
             "QProgressBar { background: #313244; border: 0; height: 8px; }"
             "QProgressBar::chunk { background: #f5c2e7; }")
         layout.addWidget(self.fatigue_bar)
-
-        self.poop_label = QLabel("便意概率: 0% (前30分钟不产生)")
-        self.poop_label.setStyleSheet("color: #fab387; font-size: 12px;")
-        layout.addWidget(self.poop_label)
 
         # 调试测试控制按钮 (仅开发调试模式显示)
         if self.dev_mode:
@@ -258,17 +254,6 @@ class RadarHUD(QWidget):
         self.last_event_label.setText(f"最新事件: {self.pet.last_feedback}")
         self.fatigue_label.setText(f"疲劳 {m.fatigue:.1f} / 100")
         self.fatigue_bar.setValue(round(m.fatigue))
-
-        if hasattr(self.pet, "get_poop_probability"):
-            if self.pet.is_poop_disabled:
-                self.poop_label.setText("排便状态: 🚯 已开启‘禁止随地大小便’")
-            else:
-                prob = self.pet.get_poop_probability()
-                elapsed_min = int((time.time() - self.pet.last_poop_time) / 60)
-                if elapsed_min < 30:
-                    self.poop_label.setText(f"便意概率: 0% (冷却中 {elapsed_min}/30分钟)")
-                else:
-                    self.poop_label.setText(f"便意概率: {int(prob * 100)}% (已过 {elapsed_min} 分钟)")
 
         self.radar_canvas.update()
 

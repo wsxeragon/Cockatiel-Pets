@@ -32,6 +32,7 @@ class BehaviorType(str, Enum):
     EXCITE_PLAY_BALL = "EXCITE_PLAY_BALL"
     POOP = "POOP"
     EAT_PLANT = "EAT_PLANT"
+    MAGIC_TRICK = "MAGIC_TRICK"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -175,6 +176,13 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=True,
         is_looping=False
     ),
+    BehaviorType.MAGIC_TRICK: BehaviorDef(
+        BehaviorType.MAGIC_TRICK, "红幕变魔术(瞬移)", 2.5, -0.4, 0.2, 1.2, 11.0, 0.0,
+        [f"magic_trick_{i}" for i in range(110)],
+        frame_interval_ms=100,
+        is_interruptible=False,
+        is_looping=False
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -204,6 +212,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_DOUBLE_PECK,
     BehaviorType.EXCITE_PLAY_BALL,
     BehaviorType.EAT_PLANT,
+    BehaviorType.MAGIC_TRICK,
     BehaviorType.MISCHIEF_CHEW,
 }
 

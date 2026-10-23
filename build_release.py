@@ -110,12 +110,17 @@ def main():
                 zipf.write(full_path, rel_path)
     full_size_mb = os.path.getsize(full_zip_path) / (1024 * 1024)
 
-    # 2. 增量热更新补丁包 (排除庞大的 _internal/，仅打包 CockatielPets.exe 与 assets，约 2.4MB)
-    # 命名为 Cockatiel-Pets-Windows-x64.zip，让已安装 0.0.6 的用户在线检查更新时精准命中并秒级下载
-    patch_zip_name = "Cockatiel-Pets-Windows-x64.zip"
+    # 2. 增量热更新补丁包 (排除庞大的 _internal/，仅打包 CockatielPets.exe 与 assets，约 4.57MB)
+    # 命名为 Cockatiel-Pets-v{APP_VERSION}-Patch-x64.zip，版本号清晰明确，更新器精准识别
+    patch_zip_name = f"Cockatiel-Pets-v{APP_VERSION}-Patch-x64.zip"
     patch_zip_path = os.path.join(dist_root, patch_zip_name)
     if os.path.exists(patch_zip_path):
         os.remove(patch_zip_path)
+
+    # 清理旧的无版本号补丁包
+    old_patch_path = os.path.join(dist_root, "Cockatiel-Pets-Windows-x64.zip")
+    if os.path.exists(old_patch_path):
+        os.remove(old_patch_path)
 
     print(f"正在压缩增量更新补丁包: {patch_zip_name} ...")
     with zipfile.ZipFile(patch_zip_path, "w", zipfile.ZIP_DEFLATED) as zipf:
@@ -128,16 +133,10 @@ def main():
                 zipf.write(full_path, rel_path)
     patch_size_mb = os.path.getsize(patch_zip_path) / (1024 * 1024)
 
-    # 如果存在历史备份别名包，清理之
-    ver_patch_name = f"Cockatiel-Pets-v{APP_VERSION}-Patch-x64.zip"
-    ver_patch_path = os.path.join(dist_root, ver_patch_name)
-    if os.path.exists(ver_patch_path):
-        os.remove(ver_patch_path)
-
     print("==================================================")
     print("=== [SUCCESS] 全部打包完成！ ===")
-    print(f"  1. 在线增量更新包 (客户端自动检测极速更新): {patch_zip_path} ({patch_size_mb:.2f} MB)")
-    print(f"  2. 全量独立安装包 (新用户/手动下载完整安装): {full_zip_path} ({full_size_mb:.2f} MB)")
+    print(f"  1. 增量更新补丁包 (版本化补丁包): {patch_zip_path} ({patch_size_mb:.2f} MB)")
+    print(f"  2. 全量独立安装包 (新用户/手动安装): {full_zip_path} ({full_size_mb:.2f} MB)")
     print("==================================================")
 
 if __name__ == "__main__":

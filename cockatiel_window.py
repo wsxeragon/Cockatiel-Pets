@@ -352,7 +352,14 @@ class CockatielWindow(QWidget):
         )
         if reply == QMessageBox.Yes:
             self.last_feedback = "正在启动独立更新器并重启..."
-            launch_updater_and_exit(zip_path)
+            try:
+                launch_updater_and_exit(zip_path)
+            except Exception as e:
+                QMessageBox.critical(
+                    self,
+                    "启动更新器失败",
+                    f"启动独立更新器遇到异常：\n{e}\n\n更新包已安全保存在：\n{zip_path}\n您可以手动解压其中的文件覆盖完成更新。"
+                )
         else:
             self.last_feedback = "更新包已保存，下次启动前可随时更新"
 

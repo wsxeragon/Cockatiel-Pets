@@ -50,6 +50,71 @@ def is_newer_version(cloud_ver_str: str, local_ver_str: str = APP_VERSION) -> bo
     """比对云端版本号是否高于本地版本号（纯数值元组比对，完全不带 V 参与判断）"""
     return normalize_version(cloud_ver_str) > normalize_version(local_ver_str)
 
+def select_best_release_asset(assets: list) -> Tuple[Optional[Dict[str, Any]], str, str]:
+    """
+    智能优选更新安装包策略：
+    在发起下载前，利用 GitHub Release API 返回的预置 assets 文件大小(size)进行提前对比决策。
+    1. 识别增量补丁包 (Cockatiel-Pets-Windows-x64.zip 或名称含 patch)
+    2. 识别全量安装包 (名称含 full 或 setup)
+    3. 若两者同时存在：
+       - 若 patch_size >= full_size: 异常情况，增量包反常偏大，自动熔断回退为全量包；
+       - 若 patch_size >= full_size * 0.8: 增量包膨胀达到全量包的 80% 以上，下载量相近但全量包能完整更新底层 Python/Qt 环境，故自动升级选择全量包；
+       - 若 patch_size < full_size * 0.8: 增量包具备明显轻量优势 (如当前 4.5MB vs 54MB，节省 >90% 流量)，优先选用极速增量包；
+    4. 若仅存在一种包，选用该包；若皆未明确标识，回退到匹配第一个 .zip 文件。
+    
+    返回: (target_asset, package_type, decision_reason)
+    """
+    patch_asset = None
+    full_asset = None
+    first_zip_asset = None
+
+    for a in assets:
+        name_lower = a.get("name", "").lower()
+        if not name_lower.endswith(".zip"):
+            continue
+        if first_zip_asset is None:
+            first_zip_asset = a
+        if name_lower == "cockatiel-pets-windows-x64.zip" or "patch" in name_lower:
+            if patch_asset is None:
+                patch_asset = a
+        elif "full" in name_lower or "setup" in name_lower:
+            if full_asset is None:
+                full_asset = a
+
+    if patch_asset and full_asset:
+        p_size = patch_asset.get("size", 0)
+        f_size = full_asset.get("size", 0)
+        p_mb = p_size / (1024 * 1024)
+        f_mb = f_size / (1024 * 1024)
+
+        if f_size > 0 and p_size > 0:
+            if p_size >= f_size:
+                reason = f"增量补丁包体积({p_mb:.1f}MB)大于或等于全量包({f_mb:.1f}MB)，已自动切换为全量安装包以保障稳定性。"
+                return full_asset, "full", reason
+            elif p_size >= int(f_size * 0.8):
+                reason = f"增量包体积({p_mb:.1f}MB)已达全量包({f_mb:.1f}MB)的 80% 阈值，自动选择全量安装包以同步更新底层运行库。"
+                return full_asset, "full", reason
+            else:
+                saved_pct = (1.0 - p_size / f_size) * 100
+                reason = f"增量补丁包({p_mb:.1f}MB)相比全量包({f_mb:.1f}MB)节省约 {saved_pct:.0f}% 下载流量，优先采用极速增量升级。"
+                return patch_asset, "patch", reason
+        else:
+            return patch_asset, "patch", "优先采用标准增量更新包。"
+
+    if patch_asset:
+        p_mb = patch_asset.get("size", 0) / (1024 * 1024)
+        return patch_asset, "patch", f"采用增量更新补丁包 ({p_mb:.1f}MB)。"
+
+    if full_asset:
+        f_mb = full_asset.get("size", 0) / (1024 * 1024)
+        return full_asset, "full", f"未提供独立补丁包，采用全量安装包 ({f_mb:.1f}MB)。"
+
+    if first_zip_asset:
+        z_mb = first_zip_asset.get("size", 0) / (1024 * 1024)
+        return first_zip_asset, "general", f"采用通用更新安装包 ({z_mb:.1f}MB)。"
+
+    return None, "none", "未在发布资产中找到可用的 zip 安装包。"
+
 def fetch_latest_release_info(timeout: int = 10) -> Dict[str, Any]:
     """
     从 GitHub 获取最新发布的 Release 信息。
@@ -82,21 +147,21 @@ def fetch_latest_release_info(timeout: int = 10) -> Dict[str, Any]:
                 body = latest.get("body", "") or "暂无更新说明"
                 assets = latest.get("assets", [])
 
-                # 寻找更新发布包：优先增量补丁包 / 标准更新包 (Cockatiel-Pets-Windows-x64.zip 或包含 patch)，次选全量安装包
-                target_asset = None
-                for a in assets:
-                    name_lower = a.get("name", "").lower()
-                    if name_lower == "cockatiel-pets-windows-x64.zip" or "patch" in name_lower:
-                        target_asset = a
-                        break
-                if not target_asset:
-                    for a in assets:
-                        if a.get("name", "").lower().endswith(".zip"):
-                            target_asset = a
-                            break
+                # 智能优选更新安装包 (在下载前提前对比增量包与全量包大小)
+                target_asset, pkg_type, decision_reason = select_best_release_asset(assets)
 
                 download_url = target_asset["browser_download_url"] if target_asset else ""
                 size_bytes = target_asset["size"] if target_asset else 0
+
+                size_mb = size_bytes / (1024 * 1024)
+                if pkg_type == "patch":
+                    pkg_desc = f"增量补丁包 (约 {size_mb:.1f} MB)"
+                elif pkg_type == "full":
+                    pkg_desc = f"全量安装包 (约 {size_mb:.1f} MB)"
+                elif size_mb > 0:
+                    pkg_desc = f"更新包 (约 {size_mb:.1f} MB)"
+                else:
+                    pkg_desc = "更新包"
 
                 return {
                     "tag_name": tag_name,
@@ -104,7 +169,10 @@ def fetch_latest_release_info(timeout: int = 10) -> Dict[str, Any]:
                     "body": body,
                     "download_url": download_url,
                     "size_bytes": size_bytes,
-                    "has_update": is_newer_version(tag_name, APP_VERSION)
+                    "has_update": is_newer_version(tag_name, APP_VERSION),
+                    "package_type": pkg_type,
+                    "package_desc": pkg_desc,
+                    "decision_reason": decision_reason
                 }
         except Exception as e:
             last_error = str(e)

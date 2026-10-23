@@ -267,7 +267,10 @@ class CockatielWindow(QWidget):
         title = info.get("title", "") or cloud_tag
         body = info.get("body", "") or "优化了体验并修复已知问题。"
         size_mb = info.get("size_bytes", 0) / (1024 * 1024)
-        size_str = f"约 {size_mb:.1f} MB" if size_mb > 0 else "未知大小"
+        pkg_desc = info.get("package_desc", "")
+        pkg_display = f"{pkg_desc}" if pkg_desc else (f"安装包约 {size_mb:.1f} MB" if size_mb > 0 else "安装包")
+        decision_reason = info.get("decision_reason", "")
+        reason_html = f"<p style='color:#555;'><small>💡 <b>更新策略</b>：{decision_reason}</small></p>" if decision_reason else ""
 
         msg_box = QMessageBox(self)
         msg_box.setWindowTitle("发现小玄凤新版本！")
@@ -276,7 +279,8 @@ class CockatielWindow(QWidget):
         msg_text = (
             f"<h3>🐤 发现新版本：{cloud_tag}</h3>"
             f"<p><b>当前版本</b>：{APP_VERSION}<br>"
-            f"<b>最新版本</b>：{cloud_tag} (安装包{size_str})</p>"
+            f"<b>最新版本</b>：{cloud_tag} ({pkg_display})</p>"
+            f"{reason_html}"
             f"<p><b>【更新说明】</b><br>{body_html}</p>"
             f"<p>是否立即下载新版本并自动更新？</p>"
         )

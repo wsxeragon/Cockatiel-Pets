@@ -274,10 +274,10 @@ def launch_updater_and_exit(zip_path: str, target_dir: Optional[Path] = None):
 
     bat_content = f"""@echo off
 chcp 65001 >nul
-title 正在为小玄凤安装新版本更新...
+title Updating Cockatiel-Pets to Latest Version...
 
 echo ======================================================
-echo    🐤 正在更新 Cockatiel-Pets 到最新版本...
+echo    [UPDATE] Updating Cockatiel-Pets to latest version...
 echo ======================================================
 echo 正在等待原程序完全退出 (PID: {pid})...
 
@@ -294,7 +294,7 @@ timeout /t 1 /nobreak >nul
 
 echo 正在解压新版资源与文件...
 if exist "{extract_dir}" rmdir /s /q "{extract_dir}"
-powershell -Command "Expand-Archive -Path '{zip_path_abs}' -DestinationPath '{extract_dir}' -Force"
+powershell -NoProfile -Command "Expand-Archive -Path '{zip_path_abs}' -DestinationPath '{extract_dir}' -Force"
 
 echo 正在覆盖程序文件至 {target_dir_abs}...
 :: 判断解压出来是否包含顶级 CockatielPets 目录
@@ -319,8 +319,13 @@ del "{zip_path_abs}" >nul 2>nul
 (goto) 2>nul & del "%~f0"
 exit
 """
-    with open(bat_path, "w", encoding="ansi") as f:
-        f.write(bat_content)
+    # 优先 utf-8 写入；若遇异常降级并忽略不可转义字符，绝不允许抛出 UnicodeEncodeError
+    try:
+        with open(bat_path, "w", encoding="utf-8", errors="ignore") as f:
+            f.write(bat_content)
+    except Exception:
+        with open(bat_path, "w", encoding="ansi", errors="ignore") as f:
+            f.write(bat_content)
 
     # 启动后台批处理
     subprocess.Popen(

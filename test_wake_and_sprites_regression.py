@@ -530,7 +530,7 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.0.7", f"APP_VERSION should be '0.0.7', got {APP_VERSION}"
+    assert APP_VERSION == "0.0.8", f"APP_VERSION should be '0.0.8', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
@@ -606,6 +606,237 @@ def test_updater_version_and_integration():
 
     print("PASS: test_updater_version_and_integration")
 
+def test_poop_behavior_flow():
+    """验证大小便行为动力学、大便悬浮窗物理下落与清理动效、配置持久化与右键禁用"""
+    from models import BehaviorType, BEHAVIOR_CATALOG
+    from config import is_poop_disabled, set_poop_disabled
+    from poop_item_window import PoopItemWindow
+
+    # 1. 模型目录完整性与帧参数定义
+    assert BehaviorType.POOP in BEHAVIOR_CATALOG
+    poop_def = BEHAVIOR_CATALOG[BehaviorType.POOP]
+    assert len(poop_def.frames) == 14
+    assert poop_def.is_interruptible is False
+    assert poop_def.is_looping is False
+    assert len(poop_def.frame_intervals_ms) == 14
+
+    # 2. 静态像素资产尺寸与马赛克格式检查 (16x14 紧凑马赛克大便)
+    poop_asset_dir = Path("assets/poop")
+    expected_sizes = {
+        "poop_idle": (16, 14),
+        "poop_fall": (14, 16),
+        "poop_land": (18, 12),
+        "poop_clean_0": (24, 20),
+        "poop_clean_1": (24, 20),
+        "poop_clean_2": (24, 20),
+        "poop_clean_3": (24, 20),
+    }
+    for name, expected_size in expected_sizes.items():
+        p = poop_asset_dir / f"{name}.png"
+        assert p.exists(), f"Missing poop asset: {p}"
+        img = Image.open(p)
+        assert img.size == expected_size, f"Size mismatch for {p}: expected {expected_size}, got {img.size}"
+
+    for idx in range(14):
+        for sdir in ["assets/sprites", "assets/sprites_classic", "assets/sprites_triple"]:
+            sp = Path(sdir) / f"poop_{idx}.png"
+            assert sp.exists(), f"Missing bird poop frame: {sp}"
+            simg = Image.open(sp)
+            assert simg.size == (100, 80), f"Size mismatch for {sp}: {simg.size}"
+
+    # 3. 实体交互与下落物理测试
+    app = QApplication.instance() or QApplication(sys.argv)
+    from cockatiel_window import CockatielWindow
+
+    pet = CockatielWindow()
+    # 确保测试前重置为允许排泄
+    set_poop_disabled(False)
+    pet.is_poop_disabled = False
+
+    # 触发后退深蹲排便
+    res = pet.trigger_poop("测试触发排便")
+    assert res is True
+    assert pet.current_behavior.code == BehaviorType.POOP
+    assert pet.current_frame_index == 0
+
+    # 步进前 8 帧，验证尚未掉落
+    initial_poop_count = len(pet.active_poops)
+    for _ in range(8):
+        pet.on_anim_frame_step()
+    assert pet.current_frame_index == 8
+    assert len(pet.active_poops) == initial_poop_count
+
+    # 步进至第 9 帧 (泄殖腔释放瞬间，生成大便实体悬浮窗)
+    pet.on_anim_frame_step()
+    assert pet.current_frame_index == 9
+    assert len(pet.active_poops) == initial_poop_count + 1
+    spawned_poop = pet.active_poops[-1]
+    assert isinstance(spawned_poop, PoopItemWindow)
+    assert spawned_poop.isVisible()
+
+    # 步进至动作播放完毕，平稳收尾切出至 IDLE_BLINK
+    for _ in range(4): # frames 10, 11, 12, 13
+        pet.on_anim_frame_step()
+    pet.on_anim_frame_step() # 结束切出
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+    assert "轻松舒爽" in pet.last_feedback
+
+    # 4. 验证点击清理动画
+    cleaned_signals = []
+    spawned_poop.cleaned.connect(lambda obj: cleaned_signals.append(obj))
+    spawned_poop.start_cleanup()
+    assert spawned_poop.state == "clean"
+    # 模拟 4 帧清理闪烁
+    for _ in range(4):
+        spawned_poop._on_clean_tick()
+    assert len(cleaned_signals) == 1
+    assert spawned_poop not in pet.active_poops
+
+    # 5. 验证禁止大小便开关与持久化
+    pet.toggle_disable_poop()
+    assert pet.is_poop_disabled is True
+    assert is_poop_disabled() is True
+    assert not pet.poop_timer.isActive()
+
+    # 禁止后无法触发排便
+    assert pet.trigger_poop("禁止后尝试排便") is False
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 再次切换恢复为允许排泄
+    pet.toggle_disable_poop()
+    assert pet.is_poop_disabled is False
+    assert is_poop_disabled() is False
+    assert pet.poop_timer.isActive()
+
+    # 6. 验证排便概率模型：前30分钟严格为0，30~60分钟从0线性增长至100%
+    now_t = time.time()
+    # 模拟刚排便完成 (t=0)
+    pet.last_poop_time = now_t
+    assert pet.get_poop_probability() == 0.0
+
+    # 模拟前 15 分钟 (900秒) -> 概率依然为 0
+    pet.last_poop_time = now_t - 900.0
+    assert pet.get_poop_probability() == 0.0
+
+    # 模拟第 29.5 分钟 (1770秒) -> 概率依然为 0
+    pet.last_poop_time = now_t - 1770.0
+    assert pet.get_poop_probability() == 0.0
+
+    # 模拟恰好 30 分钟 (1800秒) -> 概率为 0.0
+    pet.last_poop_time = now_t - 1800.0
+    assert pet.get_poop_probability() == 0.0
+
+    # 模拟 37.5 分钟 (2250秒，即 30~60 分钟的 25% 进度) -> 概率为 0.25
+    pet.last_poop_time = now_t - 2250.0
+    assert abs(pet.get_poop_probability() - 0.25) < 1e-4
+
+    # 模拟 45 分钟 (2700秒，即 30~60 分钟的 50% 进度) -> 概率为 0.50
+    pet.last_poop_time = now_t - 2700.0
+    assert abs(pet.get_poop_probability() - 0.50) < 1e-4
+
+    # 模拟 52.5 分钟 (3150秒，即 30~60 分钟的 75% 进度) -> 概率为 0.75
+    pet.last_poop_time = now_t - 3150.0
+    assert abs(pet.get_poop_probability() - 0.75) < 1e-4
+
+    # 模拟 60 分钟 (3600秒，到达满额) -> 概率为 1.0 (100%)
+    pet.last_poop_time = now_t - 3600.0
+    assert pet.get_poop_probability() == 1.0
+
+    # 模拟 80 分钟 (4800秒，超时保护) -> 概率稳定为 1.0 (100%)
+    pet.last_poop_time = now_t - 4800.0
+    assert pet.get_poop_probability() == 1.0
+
+    # 清理关闭窗口
+    pet.close()
+
+    print("PASS: test_poop_behavior_flow")
+
+def test_head_hover_2s_trigger_flow():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    from PySide6.QtCore import QEvent, QPoint
+
+    pet = CockatielWindow()
+    pet.facing_direction = -1
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    pet.mood.fright = 0.0
+
+    # 1. 模拟鼠标移入头颈部 (28, 30 为头部正中)
+    t0 = 1000.0
+    head_pos = QPoint(28, 30)
+    assert pet.is_head_neck_zone(head_pos) is True
+
+    # 刚移入 (t = 0s)
+    pet.update_head_hover(local_pos=head_pos, now=t0)
+    assert pet.hover_head_start_time == t0
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 停留 0.5 秒 (t = 0.5s) -> 不触发 (未满2秒)
+    pet.update_head_hover(local_pos=head_pos, now=t0 + 0.5)
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 停留 0.6 秒 (原旧版本阈值) -> 依然不触发 (必须超过2秒)
+    pet.update_head_hover(local_pos=head_pos, now=t0 + 0.6)
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 停留 1.5 秒 -> 依然不触发
+    pet.update_head_hover(local_pos=head_pos, now=t0 + 1.5)
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 2. 模拟移开到身体部位 (65, 40 为背部/身体) -> 重置悬停时间
+    body_pos = QPoint(65, 40)
+    assert pet.is_head_neck_zone(body_pos) is False
+    pet.update_head_hover(local_pos=body_pos, now=t0 + 1.8)
+    assert pet.hover_head_start_time is None
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 3. 再次移入头部，必须重新计算 2 秒
+    t1 = 2000.0
+    pet.update_head_hover(local_pos=head_pos, now=t1)
+    assert pet.hover_head_start_time == t1
+
+    # 停留 1.9 秒 -> 不触发
+    pet.update_head_hover(local_pos=head_pos, now=t1 + 1.9)
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 停留恰好达到/超过 2.0 秒 (t = 2.05s) -> 成功触发低头求撸 (COMFORT_BOW)
+    triggered = pet.update_head_hover(local_pos=head_pos, now=t1 + 2.05)
+    assert triggered is True
+    assert pet.current_behavior.code == BehaviorType.COMFORT_BOW
+    assert "超过2秒" in pet.last_feedback
+    # 触发后悬停起始时间重置为 None
+    assert pet.hover_head_start_time is None
+
+    # 4. 模拟 leaveEvent 移出窗口重置
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    t2 = 3000.0
+    pet.update_head_hover(local_pos=head_pos, now=t2)
+    assert pet.hover_head_start_time == t2
+
+    dummy_event = QEvent(QEvent.Type.Leave)
+    pet.leaveEvent(dummy_event)
+    assert pet.hover_head_start_time is None
+
+    # 移出后 10 秒再次移入，不会因为历史时间差瞬发触发
+    pet.update_head_hover(local_pos=head_pos, now=t2 + 10.0)
+    assert pet.hover_head_start_time == t2 + 10.0
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    # 5. 模拟惊吓戒备状态 (fright >= 25.0) 下不会触发主动求撸
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 10.0)
+    pet.mood.fright = 30.0
+    t3 = 4000.0
+    pet.update_head_hover(local_pos=head_pos, now=t3)
+    triggered = pet.update_head_hover(local_pos=head_pos, now=t3 + 2.5)
+    assert triggered is False
+    assert pet.current_behavior.code == BehaviorType.IDLE_BLINK
+
+    pet.close()
+    print("PASS: test_head_hover_2s_trigger_flow")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
@@ -616,4 +847,6 @@ if __name__ == "__main__":
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()
     test_updater_version_and_integration()
+    test_poop_behavior_flow()
+    test_head_hover_2s_trigger_flow()
     print("ALL TESTS PASSED!")

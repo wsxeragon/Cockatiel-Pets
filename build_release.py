@@ -56,8 +56,8 @@ def main():
     with open(os.path.join(dest_assets, "app_config.json"), "w", encoding="utf-8") as f:
         json.dump({"dev_mode": False}, f, indent=2, ensure_ascii=False)
 
-    # 2. 拷贝三套羽冠动画精灵帧
-    for sprite_dir in ["sprites", "sprites_classic", "sprites_triple"]:
+    # 2. 拷贝三套羽冠动画精灵帧与大便组件资源
+    for sprite_dir in ["sprites", "sprites_classic", "sprites_triple", "poop"]:
         src_dir = os.path.join("assets", sprite_dir)
         dst_dir = os.path.join(dest_assets, sprite_dir)
         if os.path.exists(src_dir):
@@ -91,6 +91,10 @@ def main():
 """
     with open(os.path.join(dist_folder, "使用说明.txt"), "w", encoding="utf-8") as f:
         f.write(readme_txt)
+
+    # 写入空白 txt 文件作为 0.0.8 版本变更验证标志
+    with open(os.path.join(dist_folder, "version_0.0.8.txt"), "w", encoding="utf-8") as f:
+        pass
 
     print("=== [4/4] 压缩打包绿色全量包与增量补丁包 ===")
     from config import APP_VERSION

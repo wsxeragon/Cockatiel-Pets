@@ -1,3 +1,4 @@
 {
-  "dev_mode": true
+  "dev_mode": true,
+  "disable_poop": false
 }

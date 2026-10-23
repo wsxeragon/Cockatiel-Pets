@@ -30,6 +30,7 @@ class BehaviorType(str, Enum):
     EXCITE_BONK = "EXCITE_BONK"
     EXCITE_DOUBLE_PECK = "EXCITE_DOUBLE_PECK"
     EXCITE_PLAY_BALL = "EXCITE_PLAY_BALL"
+    POOP = "POOP"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -156,6 +157,14 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         BehaviorType.EXCITE_PLAY_BALL, "兴奋杂技踩球", 5.0, -0.4, 0.2, 1.3, 30.0, 0.0,
         [f"play_ball_{i}" for i in range(300)], frame_interval_ms=100,
         is_interruptible=True, is_looping=False
+    ),
+    BehaviorType.POOP: BehaviorDef(
+        BehaviorType.POOP, "后退深蹲排便", 0.0, 0.0, 0.0, 0.0, 5.0, 0.0,
+        [f"poop_{i}" for i in range(14)],
+        frame_interval_ms=250,
+        frame_intervals_ms=[300, 220, 220, 220, 260, 240, 450, 600, 600, 350, 240, 180, 180, 500],
+        is_interruptible=False,
+        is_looping=False
     ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(

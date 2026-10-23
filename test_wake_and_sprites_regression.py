@@ -530,7 +530,7 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.0.8", f"APP_VERSION should be '0.0.8', got {APP_VERSION}"
+    assert APP_VERSION == "0.0.9", f"APP_VERSION should be '0.0.9', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
@@ -837,6 +837,70 @@ def test_head_hover_2s_trigger_flow():
     pet.close()
     print("PASS: test_head_hover_2s_trigger_flow")
 
+def test_startup_fly_in_and_exit_fly_out_flow():
+    """验证开机从屏幕外呼啸飞入降落动画，以及告别退出时向上飞离屏幕外再退出的全套动力学"""
+    app = QApplication.instance() or QApplication(sys.argv)
+    from cockatiel_window import CockatielWindow
+    from models import BehaviorType
+
+    # 1. 测试开机飞入动力学 (start_fly_in)
+    pet = CockatielWindow(start_with_fly_in=True)
+    assert pet.is_flying is True
+    assert pet.flight_purpose == "fly_in"
+    assert pet.current_behavior.code == BehaviorType.IDLE_FLY
+
+    rect = pet.get_screen_rect(use_available=True)
+    # 起点必定在屏幕外 (x < rect.left() or x > rect.right() - w or y < rect.top())
+    start_x = pet.fly_start_pos.x()
+    start_y = pet.fly_start_pos.y()
+    is_outside = (
+        start_x < rect.left()
+        or start_x > rect.right() - pet.width()
+        or start_y < rect.top()
+    )
+    assert is_outside, f"Fly-in start pos ({start_x}, {start_y}) must be outside screen {rect}!"
+
+    # 终点必定在屏幕可视区域内
+    target_x = pet.fly_target_pos.x()
+    target_y = pet.fly_target_pos.y()
+    assert rect.left() <= target_x <= rect.right() - pet.width()
+    assert rect.top() <= target_y <= rect.bottom() - pet.height()
+
+    # 步进飞行动力学插值
+    while pet.is_flying:
+        pet.on_fly_step()
+
+    assert pet.is_flying is False
+    assert pet.fly_progress == 1.0
+    # 触地降落位置已就绪
+    assert abs(pet.x() - int(target_x)) <= 15
+    assert abs(pet.y() - int(target_y)) <= 15
+    # 落地动作播放
+    assert pet.current_behavior.code in (BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF, BehaviorType.IDLE_BLINK)
+
+    # 2. 测试告别退出飞离动力学 (start_fly_out_and_quit)
+    quit_called = []
+    pet._on_fly_out_finished = lambda: quit_called.append(True)
+
+    pet.start_fly_out_and_quit()
+    assert pet.is_exiting is True
+    assert pet.is_flying is True
+    assert pet.flight_purpose == "fly_out"
+    assert pet.current_behavior.code == BehaviorType.IDLE_FLY
+
+    # 离场目标坐标必定在屏幕上方外部
+    assert pet.fly_target_pos.y() < rect.top()
+
+    # 步进插值直到完全飞离屏幕
+    while pet.is_flying:
+        pet.on_fly_step()
+
+    assert pet.is_flying is False
+    assert len(quit_called) == 1, "Exit callback must be triggered once cockatiel leaves the screen!"
+
+    pet.close()
+    print("PASS: test_startup_fly_in_and_exit_fly_out_flow")
+
 if __name__ == "__main__":
     test_models_definitions()
     test_wake_no_flicker_flow()
@@ -849,4 +913,5 @@ if __name__ == "__main__":
     test_updater_version_and_integration()
     test_poop_behavior_flow()
     test_head_hover_2s_trigger_flow()
+    test_startup_fly_in_and_exit_fly_out_flow()
     print("ALL TESTS PASSED!")

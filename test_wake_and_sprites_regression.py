@@ -558,19 +558,19 @@ def test_updater_version_and_integration():
     win.close()
 
     # 4. 验证智能选包策略与大小提前比对逻辑 (select_best_release_asset)
-    # 场景 A: 典型发布 (增量 4.5MB vs 全量 54MB) -> 极速增量优先
+    # 场景 A: 典型发布 (增量 Patch 4.5MB vs 全量 54MB) -> 极速增量优先
     assets_standard = [
-        {"name": "Cockatiel-Pets-Windows-x64.zip", "size": 4791992, "browser_download_url": "http://patch.zip"},
+        {"name": "Cockatiel-Pets-v0.0.7-Patch-x64.zip", "size": 4791992, "browser_download_url": "http://patch.zip"},
         {"name": "Cockatiel-Pets-v0.0.7-Full-Setup.zip", "size": 56668160, "browser_download_url": "http://full.zip"},
     ]
     target, pkg_type, reason = updater.select_best_release_asset(assets_standard)
     assert pkg_type == "patch"
-    assert target["name"] == "Cockatiel-Pets-Windows-x64.zip"
+    assert target["name"] == "Cockatiel-Pets-v0.0.7-Patch-x64.zip"
     assert "节省约" in reason
 
     # 场景 B: 增量膨胀达 80% 阈值 (增量 45MB vs 全量 50MB) -> 自动熔断选择全量包
     assets_bloated_patch = [
-        {"name": "Cockatiel-Pets-Windows-x64.zip", "size": 45 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
+        {"name": "Cockatiel-Pets-v0.0.8-Patch-x64.zip", "size": 45 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
         {"name": "Cockatiel-Pets-v0.0.8-Full-Setup.zip", "size": 50 * 1024 * 1024, "browser_download_url": "http://full.zip"},
     ]
     target, pkg_type, reason = updater.select_best_release_asset(assets_bloated_patch)
@@ -580,7 +580,7 @@ def test_updater_version_and_integration():
 
     # 场景 C: 增量包异常大于全量包 (增量 60MB vs 全量 50MB) -> 自动切换全量包
     assets_larger_patch = [
-        {"name": "Cockatiel-Pets-Windows-x64.zip", "size": 60 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
+        {"name": "Cockatiel-Pets-v0.0.8-Patch-x64.zip", "size": 60 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
         {"name": "Cockatiel-Pets-v0.0.8-Full-Setup.zip", "size": 50 * 1024 * 1024, "browser_download_url": "http://full.zip"},
     ]
     target, pkg_type, reason = updater.select_best_release_asset(assets_larger_patch)
@@ -596,13 +596,13 @@ def test_updater_version_and_integration():
     assert pkg_type == "full"
     assert target["name"] == "Cockatiel-Pets-v0.0.8-Full-Setup.zip"
 
-    # 场景 E: 仅提供补丁包
+    # 场景 E: 仅提供补丁包 (兼容通用名与版本化命名)
     assets_only_patch = [
-        {"name": "Cockatiel-Pets-Windows-x64.zip", "size": 4 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
+        {"name": "Cockatiel-Pets-v0.0.7-Patch-x64.zip", "size": 4 * 1024 * 1024, "browser_download_url": "http://patch.zip"},
     ]
     target, pkg_type, reason = updater.select_best_release_asset(assets_only_patch)
     assert pkg_type == "patch"
-    assert target["name"] == "Cockatiel-Pets-Windows-x64.zip"
+    assert target["name"] == "Cockatiel-Pets-v0.0.7-Patch-x64.zip"
 
     print("PASS: test_updater_version_and_integration")
 

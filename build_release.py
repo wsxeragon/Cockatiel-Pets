@@ -128,16 +128,16 @@ def main():
                 zipf.write(full_path, rel_path)
     patch_size_mb = os.path.getsize(patch_zip_path) / (1024 * 1024)
 
-    # 3. 额外生成一个带版本号命名的补丁包备份 (供明确需要按版本号下载补丁的用户)
+    # 如果存在历史备份别名包，清理之
     ver_patch_name = f"Cockatiel-Pets-v{APP_VERSION}-Patch-x64.zip"
     ver_patch_path = os.path.join(dist_root, ver_patch_name)
-    shutil.copy2(patch_zip_path, ver_patch_path)
+    if os.path.exists(ver_patch_path):
+        os.remove(ver_patch_path)
 
     print("==================================================")
     print("=== [SUCCESS] 全部打包完成！ ===")
-    print(f"  1. 增量补丁包 (老用户秒级在线更新): {patch_zip_path} ({patch_size_mb:.2f} MB)")
-    print(f"  2. 全量独立包 (新用户首次解压即用): {full_zip_path} ({full_size_mb:.2f} MB)")
-    print(f"  3. 命名增量包 (备用版本补丁):     {ver_patch_path} ({patch_size_mb:.2f} MB)")
+    print(f"  1. 在线增量更新包 (客户端自动检测极速更新): {patch_zip_path} ({patch_size_mb:.2f} MB)")
+    print(f"  2. 全量独立安装包 (新用户/手动下载完整安装): {full_zip_path} ({full_size_mb:.2f} MB)")
     print("==================================================")
 
 if __name__ == "__main__":

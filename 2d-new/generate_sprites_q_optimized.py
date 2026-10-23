@@ -1573,6 +1573,150 @@ def draw_play_ball_sparkle(d, x, y, size=3, color="#ffd166"):
     d.line([(x, y - size), (x, y + size)], fill=color, width=1)
     d.point((x, y), fill="#ffffff")
 
+# -------------------------------------------------------------
+# Canonical 27-Degree Standing Legs Compositor (统一标准 27° 前倾站姿)
+# -------------------------------------------------------------
+_GROUND_Y = 73
+_INK = (53, 52, 56, 255)
+_INKISH = {(53, 52, 56, 255), (44, 43, 48, 255)}
+_NEAR_HI = (234, 214, 207, 255)
+_NEAR = (196, 171, 167, 255)
+_NEAR_SH = (170, 145, 142, 255)
+_FAR = (154, 130, 131, 255)
+_FAR_SH = (132, 109, 110, 255)
+_FAR_HI = (177, 153, 153, 255)
+_LEG = {
+    (187, 165, 165, 255),
+    (165, 144, 144, 255),
+    (200, 184, 181, 255),
+}
+_NEAR_SHIFT = 2
+_HIP_FORWARD = 1
+
+def clean_legs_local(im):
+    out = im.copy()
+    pixels = out.load()
+    w, h = im.size
+    leg_points = [
+        (x, y)
+        for y in range(55, h)
+        for x in range(w)
+        if im.getpixel((x, y)) in _LEG
+    ]
+    clear = set(leg_points)
+    for x, y in leg_points:
+        for dx in (-1, 0, 1):
+            for dy in (-1, 0, 1):
+                qx, qy = x + dx, y + dy
+                if 0 <= qx < w and 0 <= qy < h and im.getpixel((qx, qy)) in _INKISH:
+                    clear.add((qx, qy))
+    for x, y in clear:
+        pixels[x, y] = (0, 0, 0, 0)
+    return out
+
+def body_bottom(body):
+    w, h = body.size
+    for y in range(h - 1, 54, -1):
+        xs = [x for x in range(w) if body.getpixel((x, y))[3]]
+        if len(xs) >= 4:
+            return y, (min(xs) + max(xs)) // 2
+    return 69, 50
+
+def runs_at(im, y):
+    w = im.size[0]
+    xs = [x for x in range(w) if im.getpixel((x, y)) in _LEG]
+    if not xs:
+        return []
+    runs = []
+    start = prev = xs[0]
+    for x in xs[1:]:
+        if x != prev + 1:
+            runs.append((start, prev))
+            start = x
+        prev = x
+    runs.append((start, prev))
+    return runs
+
+def feet_centers(im):
+    runs = runs_at(im, 73) or runs_at(im, 72)
+    left = [r for r in runs if (r[0] + r[1]) / 2 < 49]
+    right = [r for r in runs if (r[0] + r[1]) / 2 >= 49]
+    front = (left[0][0] + left[0][1]) / 2 if left else 41.5
+    back = (right[-1][0] + right[-1][1]) / 2 if right else 54.5
+    return front, back
+
+def _stroke(draw, points, fill, width):
+    draw.line(points, fill=fill, width=width, joint="curve")
+    radius = width // 2
+    for x, y in points:
+        draw.rectangle(
+            (x - radius, y - radius, x - radius + width - 1, y - radius + width - 1),
+            fill=fill,
+        )
+
+def _leg_points(hip, ankle, bend):
+    t = 0.55
+    return [
+        hip,
+        (
+            round(hip[0] * (1 - t) + ankle[0] * t) + bend,
+            round(hip[1] * (1 - t) + ankle[1] * t),
+        ),
+        ankle,
+    ]
+
+def _draw_far_leg(draw, hip, foot_x):
+    foot = round(foot_x)
+    ankle = (foot + 2, _GROUND_Y - 2)
+    points = _leg_points(hip, ankle, 1)
+    _stroke(draw, points, _FAR, 2)
+    draw.point((points[1][0] - 1, points[1][1]), fill=_FAR_HI)
+    draw.point((ankle[0] - 1, ankle[1] - 1), fill=_FAR_HI)
+    top = _GROUND_Y - 1
+    draw.rectangle((foot - 2, top, foot + 2, top + 1), fill=_FAR)
+    draw.line((foot - 2, top + 1, foot + 2, top + 1), fill=_FAR_SH, width=1)
+    draw.point((foot - 3, top + 1), fill=_FAR_SH)
+
+def _draw_near_leg(draw, hip, foot_x):
+    foot = round(foot_x)
+    ankle = (foot + 2, _GROUND_Y - 2)
+    points = _leg_points(hip, ankle, 1)
+    _stroke(draw, points, _INK, 4)
+    _stroke(draw, points, _NEAR, 2)
+    _stroke(draw, [(x - 1, y) for x, y in points], _NEAR_HI, 1)
+    top = _GROUND_Y - 1
+    draw.rectangle((foot - 4, top, foot + 3, top + 1), fill=_NEAR)
+    draw.line((foot - 4, top, foot + 2, top), fill=_NEAR_HI, width=1)
+    draw.line((foot - 4, top + 1, foot + 3, top + 1), fill=_NEAR_SH, width=1)
+    draw.point((foot + 3, top - 1), fill=_NEAR_SH)
+    draw.point((foot + 2, top - 1), fill=_NEAR)
+
+def render_standard_legs(im):
+    w, h = im.size
+    body = clean_legs_local(im)
+    by, bc = body_bottom(body)
+    front, back = feet_centers(im)
+    front += _NEAR_SHIFT
+    hip_y = max(65, by - 4)
+    hip_x = round(front) + (6 if hip_y == 65 else 4) - _HIP_FORWARD
+
+    canvas = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    far_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    _draw_far_leg(ImageDraw.Draw(far_layer), (round(back) + 3, 63), back)
+    canvas.alpha_composite(far_layer)
+    canvas.alpha_composite(body)
+
+    near_layer = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+    _draw_near_leg(ImageDraw.Draw(near_layer), (hip_x, hip_y), front)
+    canvas.alpha_composite(near_layer)
+
+    for x in range(hip_x - 2, hip_x + 2):
+        c = body.getpixel((x, hip_y - 1))
+        if c[3]:
+            canvas.putpixel((x, hip_y - 1), c)
+
+    return canvas
+
 def build_play_ball_frames(crest_style: str = "triple") -> dict:
     CW = 260
     CH = 120
@@ -1580,14 +1724,14 @@ def build_play_ball_frames(crest_style: str = "triple") -> dict:
     BALL_SIZE = 36
     frames = []
 
-    # Act 1: 0.0s - 2.5s (25 frames)
+    # Act 1: 0.0s - 2.5s (25 frames) - 初始站立与等待红球掉落
     ball_spawn_x = 110
     bird_start_cx = 175
     for _ in range(2):
         im = Image.new("RGBA", (CW, CH), (0, 0, 0, 0))
         d = ImageDraw.Draw(im)
         draw_play_ball_bird_shadow(d, bird_start_cx, GY)
-        b_im = bird_q_optimized(crest_style=crest_style)
+        b_im = render_standard_legs(bird_q_optimized(crest_style=crest_style))
         im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
         frames.append(im)
         
@@ -1602,6 +1746,7 @@ def build_play_ball_frames(crest_style: str = "triple") -> dict:
             b_im = bird_q_optimized(head=(-2, -1), crest="high", crest_style=crest_style)
         else:
             b_im = bird_q_optimized(head=(-2, 0), crest="high", mouth="open", eye="open", crest_style=crest_style)
+        b_im = render_standard_legs(b_im)
         im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
         if fy < GY:
             ball_im = render_pure_red_ball(BALL_SIZE, squash_y=1.1)
@@ -1626,6 +1771,7 @@ def build_play_ball_frames(crest_style: str = "triple") -> dict:
         d = ImageDraw.Draw(im)
         draw_play_ball_bird_shadow(d, bird_start_cx, GY)
         b_im = bird_q_optimized(lift=2 if h_off[1] > 0 else 0, head=h_off, crest=cr, mouth=mth, crest_style=crest_style)
+        b_im = render_standard_legs(b_im)
         im.paste(b_im, (bird_start_cx - 53, GY - 72), b_im)
         draw_play_ball_shadow(d, ball_spawn_x, GY, radius=18, alpha_factor=0.9)
         ball_im = render_pure_red_ball(BALL_SIZE, squash_y=sq)
@@ -1896,8 +2042,17 @@ def build_play_ball_frames(crest_style: str = "triple") -> dict:
         # 2. 小鸟地面投影
         ground_dist = max(1, GY - bby)
         draw_play_ball_bird_shadow(d, bcx, GY, width=max(14, int(28 - ground_dist * 0.3)), alpha_factor=max(0.25, 0.85 - ground_dist * 0.012))
-        # 3. 小鸟飞行姿态
-        b_im = bird_q_optimized(wing=w_mode, tuck_feet=(bby < GY), lift=l_val, crest="high" if bby < GY else "normal", crest_style=crest_style)
+        # 3. 小鸟飞行姿态与着陆
+        if bby == GY and w_mode == "fly_down":
+            # 触地瞬间 (frame 290): 双爪稳稳触地，屈腿缓冲下沉 2px
+            b_touch = bird_q_optimized(wing="fly_down", tuck_feet=False, lift=l_val, crest="normal", crest_style=crest_style)
+            b_im = render_standard_legs(b_touch)
+        elif bby == GY and w_mode == "fold":
+            # 站定收翅 (frame 291): 恢复标准 27° 站立腿姿
+            b_fold = bird_q_optimized(wing="fold", lift=l_val, crest="normal", crest_style=crest_style)
+            b_im = render_standard_legs(b_fold)
+        else:
+            b_im = bird_q_optimized(wing=w_mode, tuck_feet=(bby < GY), lift=l_val, crest="high" if bby < GY else "normal", crest_style=crest_style)
         im.paste(b_im, (bcx - 53, bby - 72), b_im)
         frames.append(im)
 
@@ -1907,7 +2062,8 @@ def build_play_ball_frames(crest_style: str = "triple") -> dict:
         d = ImageDraw.Draw(im)
         draw_play_ball_bird_shadow(d, 84, GY, width=28, alpha_factor=0.85)
         is_blinking = (2 <= i <= 5)
-        b_im = bird_q_optimized(wing="fold", puff=1 if i < 4 else 0, eye="blink" if is_blinking else "open", crest="normal", tuck_feet=False, crest_style=crest_style)
+        b_base = bird_q_optimized(wing="fold", puff=1 if i < 4 else 0, eye="blink" if is_blinking else "open", crest="normal", tuck_feet=False, crest_style=crest_style)
+        b_im = render_standard_legs(b_base)
         im.paste(b_im, (84 - 53, GY - 72), b_im)
         frames.append(im)
 

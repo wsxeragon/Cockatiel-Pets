@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # 当前应用版本号（不带 V 前缀）
-APP_VERSION = "0.0.6"
+APP_VERSION = "0.0.7"
 
 def get_base_dir() -> Path:
     """获取运行根目录（自动兼容 PyInstaller 打包环境与源码开发环境）"""

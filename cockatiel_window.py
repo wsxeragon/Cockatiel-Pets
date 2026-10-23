@@ -119,6 +119,11 @@ class CockatielWindow(QWidget):
         self.poop_timer.timeout.connect(self.on_poop_timer_tick)
         self._schedule_next_poop()
 
+        # 啃咬植物动画镜像状态与原点坐标记录
+        self.is_plant_chew_mirrored: bool = False
+        self._plant_chew_orig_x: int = 0
+        self._plant_chew_orig_y: int = 0
+
         # 初始化位置 (屏幕右下角靠近任务栏，完全限制在可用可视区域内)
         rect = self.get_screen_rect(use_available=True)
         init_x = rect.right() - self.width() - 30
@@ -438,6 +443,12 @@ class CockatielWindow(QWidget):
         if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
             return pix
 
+        # 啃咬植物动作：由 is_plant_chew_mirrored 控制是否进行整体镜像翻转
+        if self.current_behavior.code == BehaviorType.EAT_PLANT:
+            if getattr(self, 'is_plant_chew_mirrored', False) and not pix.isNull():
+                return pix.transformed(QTransform().scale(-1, 1))
+            return pix
+
         # 所有原始帧面向左，只有朝右时镜像。
         if self.facing_direction == 1 and not pix.isNull():
             # 睡觉状态朝右时：使用专用右朝向帧 (sleep_0_r, sleep_1_r)，
@@ -450,6 +461,7 @@ class CockatielWindow(QWidget):
         return pix
 
     def switch_behavior(self, new_b_def: BehaviorDef, duration: Optional[float] = None, feedback: str = None):
+        old_behavior_code = self.current_behavior.code if self.current_behavior else None
         if duration is None:
             duration = max(1.0, random.gauss(new_b_def.duration_mean, new_b_def.duration_std))
 
@@ -462,6 +474,34 @@ class CockatielWindow(QWidget):
             restore_y = self.y() + 98 - 72
             self.safe_move(restore_x, restore_y, margin=10)
 
+        # 从啃咬植物切出时：恢复标准 100x80 画布并无缝衔接鸟体当前屏幕坐标，绝不消失或瞬移
+        if self.current_behavior and self.current_behavior.code == BehaviorType.EAT_PLANT and new_b_def.code != BehaviorType.EAT_PLANT:
+            self.setFixedSize(100, 80)
+            is_mirrored = getattr(self, 'is_plant_chew_mirrored', False)
+            if new_b_def.code == BehaviorType.IDLE_WADDLE:
+                # 自然完成：鸟在最后一帧位于 bx=125, by=10，无缝顺承至当前位置继续漫步
+                bx_end = 125
+                by_end = 10
+                if is_mirrored:
+                    target_x = self.x() + (140 - bx_end)
+                    exit_dir = -1
+                else:
+                    target_x = self.x() + bx_end
+                    exit_dir = 1
+                target_y = self.y() + by_end
+                self.safe_move(target_x, target_y, margin=10)
+                self.facing_direction = exit_dir
+                self.waddle_direction = exit_dir
+                self.waddle_origin_x = target_x
+                self.waddle_step_count = 0
+                self.waddle_consecutive_steps = 0
+                self.waddle_mode = "straight_to_edge"
+            else:
+                # 异常强行打断时：平稳恢复原站立坐标
+                orig_x = getattr(self, '_plant_chew_orig_x', self.x())
+                orig_y = getattr(self, '_plant_chew_orig_y', self.y())
+                self.safe_move(orig_x, orig_y, margin=10)
+
         # 进入玩球时，临时扩容为 260x120 高清像素舞台，并无缝贴合原站立点
         if new_b_def.code == BehaviorType.EXCITE_PLAY_BALL:
             rect = self.get_screen_rect(use_available=True)
@@ -473,6 +513,36 @@ class CockatielWindow(QWidget):
             self.safe_move(target_x, target_y, margin=10)
             self.facing_direction = -1
             duration = 60.0  # 提供充分的冗余时间，由最后一帧自然驱动谢幕切出，绝不被时钟截断
+
+        # 进入啃咬植物时，临时扩容为 240x90 舞台，并无缝贴合原站立点
+        if new_b_def.code == BehaviorType.EAT_PLANT:
+            self._plant_chew_orig_x = self.x()
+            self._plant_chew_orig_y = self.y()
+            rect = self.get_screen_rect(use_available=True)
+
+            if not hasattr(self, 'is_plant_chew_mirrored') or self.is_plant_chew_mirrored is None:
+                margin = 200
+                cur_x = self.x()
+                if cur_x < rect.left() + margin:
+                    self.is_plant_chew_mirrored = True
+                elif cur_x > rect.right() - self.width() - margin:
+                    self.is_plant_chew_mirrored = False
+                else:
+                    self.is_plant_chew_mirrored = (self.facing_direction == 1)
+
+            if self.is_plant_chew_mirrored:
+                target_x = self.x() + 36
+                self.facing_direction = 1
+            else:
+                target_x = self.x() - 160
+                self.facing_direction = -1
+
+            target_y = self.y() - 10
+            target_x = max(rect.left() + 10, min(rect.right() - 240 - 10, target_x))
+            target_y = max(rect.top() + 10, min(rect.bottom() - 90 - 10, target_y))
+            self.setFixedSize(240, 90)
+            self.safe_move(target_x, target_y, margin=10)
+            duration = 60.0
 
         # 从兴奋类行为切出时 (打断或结束)，自动清空兴奋值
         if self.current_behavior and self.current_behavior.code in EXCITED_BEHAVIORS and new_b_def.code not in EXCITED_BEHAVIORS:
@@ -521,21 +591,23 @@ class CockatielWindow(QWidget):
 
         # 摇晃溜达：初始化模式(起点来回踱步 vs 径直走碰屏幕)与初始方向
         if new_b_def.code == BehaviorType.IDLE_WADDLE:
-            self.waddle_origin_x = self.x()
-            self.waddle_consecutive_steps = 0
-            self.waddle_step_count = 0
-            self.waddle_mode = random.choice(["origin_pacing", "straight_to_edge"])
-            rect = self.get_screen_rect(use_available=True)
-            cur_x = self.x()
-            min_x = rect.left() + 35
-            max_x = rect.right() - self.width() - 35
-            if cur_x <= min_x:
-                self.waddle_direction = 1
-            elif cur_x >= max_x:
-                self.waddle_direction = -1
-            else:
-                self.waddle_direction = random.choice([-1, 1])
-            self.facing_direction = self.waddle_direction
+            # 若是从啃咬植物无缝衔接切入，保留已对齐的行走方向与模式，不作随机覆盖
+            if old_behavior_code != BehaviorType.EAT_PLANT:
+                self.waddle_origin_x = self.x()
+                self.waddle_consecutive_steps = 0
+                self.waddle_step_count = 0
+                self.waddle_mode = random.choice(["origin_pacing", "straight_to_edge"])
+                rect = self.get_screen_rect(use_available=True)
+                cur_x = self.x()
+                min_x = rect.left() + 35
+                max_x = rect.right() - self.width() - 35
+                if cur_x <= min_x:
+                    self.waddle_direction = 1
+                elif cur_x >= max_x:
+                    self.waddle_direction = -1
+                else:
+                    self.waddle_direction = random.choice([-1, 1])
+                self.facing_direction = self.waddle_direction
 
         # 调整帧播放速率
         intervals = getattr(new_b_def, 'frame_intervals_ms', None)
@@ -679,7 +751,7 @@ class CockatielWindow(QWidget):
             return
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP):
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT):
             return
 
         now = time.time()
@@ -752,6 +824,21 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update_view()
 
+    def trigger_eat_plant(self, reason: str = "趣味啃咬植物"):
+        """触发啃咬植物行为，自动根据当前屏幕位置与朝向决策标准/镜像模式"""
+        rect = self.get_screen_rect(use_available=True)
+        margin = 200
+        cur_x = self.x()
+
+        if cur_x < rect.left() + margin:
+            self.is_plant_chew_mirrored = True  # 靠左屏幕：向右镜像
+        elif cur_x > rect.right() - self.width() - margin:
+            self.is_plant_chew_mirrored = False # 靠右屏幕：向左标准
+        else:
+            self.is_plant_chew_mirrored = (self.facing_direction == 1)
+
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EAT_PLANT], None, reason)
+
     def closeEvent(self, event):
         """主窗口关闭时清理所有活跃的大便实体"""
         for poop in list(self.active_poops):
@@ -807,6 +894,11 @@ class CockatielWindow(QWidget):
                         return
                     elif self.current_behavior.code == BehaviorType.POOP:
                         self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "呼~ 轻松舒爽！")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
+                    elif self.current_behavior.code == BehaviorType.EAT_PLANT:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 20.0, "植物啃完树枝咬断，步履轻快溜达20秒离开~")
                         if self.hud_window:
                             self.hud_window.update_view()
                         return
@@ -977,8 +1069,8 @@ class CockatielWindow(QWidget):
                 self.safe_move(new_x, cur_pos.y(), margin=10)
 
         # 4. 检查动作是否自然到期，抽取下一个动作
-        # 杂技踩球与后退深蹲排便包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP):
+        # 杂技踩球、后退深蹲排便与趣味啃咬植物包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT):
             if self.hud_window:
                 self.hud_window.update_view()
             return
@@ -1126,9 +1218,9 @@ class CockatielWindow(QWidget):
         if now is None:
             now = time.time()
 
-        # 拖拽中、飞行中、睡眠中、排便中、玩球中不触发悬停求撸
+        # 拖拽中、飞行中、睡眠中、排便中、玩球中、啃植物中不触发悬停求撸
         if self.is_dragging or self.is_flying or self.current_behavior.code in (
-            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL
+            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT
         ):
             self.hover_head_start_time = None
             return False
@@ -1195,6 +1287,11 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被鼠标点击吵醒了")
                 return
+
+            # 玩球与啃咬植物等大舞台动作播放期间，禁止鼠标拖拽与触摸打断
+            if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT):
+                return
+
             # 检查点击点是否命中非透明羽毛
             pix = self.get_current_pixmap()
             if not pix.isNull() and 0 <= pos.x() < pix.width() and 0 <= pos.y() < pix.height():
@@ -1432,6 +1529,7 @@ class CockatielWindow(QWidget):
             act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
             act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
             act_play_ball = menu.addAction("🔴 兴奋杂技踩球 (30秒巡游)")
+            act_eat_plant = menu.addAction("🌿 趣味啃咬植物 (自适应嚼叶啃树枝)")
             act_poop = menu.addAction(f"💩 触发拉屎行为 (便意概率: {prob_pct}%, 已过{elapsed_min}分)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
             act_waddle = menu.addAction("🚶 摇晃溜达 (双模式漫步)")
@@ -1447,6 +1545,7 @@ class CockatielWindow(QWidget):
             act_bonk = None
             act_double_peck = None
             act_play_ball = None
+            act_eat_plant = None
             act_poop = None
             act_peck = None
             act_waddle = None
@@ -1514,6 +1613,10 @@ class CockatielWindow(QWidget):
                 self.wake_up("被红球吸引醒来！")
             self.mood.excitement = max(self.mood.excitement, 75.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_PLAY_BALL], None, "右键菜单触发：兴奋杂技踩球！")
+        elif act_eat_plant and res == act_eat_plant:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+                self.wake_up("被植物吸引醒来！")
+            self.trigger_eat_plant("右键菜单触发：趣味啃咬植物！")
         elif act_poop and res == act_poop:
             self.trigger_poop("右键菜单触发：后退深蹲排便！")
         elif act_peck and res == act_peck:

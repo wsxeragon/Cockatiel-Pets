@@ -31,6 +31,7 @@ class BehaviorType(str, Enum):
     EXCITE_DOUBLE_PECK = "EXCITE_DOUBLE_PECK"
     EXCITE_PLAY_BALL = "EXCITE_PLAY_BALL"
     POOP = "POOP"
+    EAT_PLANT = "EAT_PLANT"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -166,6 +167,14 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=False,
         is_looping=False
     ),
+    BehaviorType.EAT_PLANT: BehaviorDef(
+        BehaviorType.EAT_PLANT, "趣味啃咬植物", 3.0, -0.4, 0.3, 1.0, 22.0, 0.0,
+        [f"eat_plant_{i}" for i in range(138)],
+        frame_interval_ms=120,
+        frame_intervals_ms=[105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 110, 110, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 160, 130, 130, 130, 120, 120, 140, 140, 140, 130, 130, 140, 120, 140, 120, 140, 120, 140, 120, 150, 120, 120, 120, 120, 120, 120, 140, 140, 130, 130, 120, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105],
+        is_interruptible=True,
+        is_looping=False
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -194,6 +203,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_BONK,
     BehaviorType.EXCITE_DOUBLE_PECK,
     BehaviorType.EXCITE_PLAY_BALL,
+    BehaviorType.EAT_PLANT,
     BehaviorType.MISCHIEF_CHEW,
 }
 
@@ -264,6 +274,7 @@ class MoodDynamics:
                 BehaviorType.IDLE_WADDLE: 0.0026,
                 BehaviorType.IDLE_FLY: 0.65,
                 BehaviorType.EXCITE_PLAY_BALL: 0.05,
+                BehaviorType.EAT_PLANT: 0.04,
                 BehaviorType.EXCITE_HOP: 0.0019,
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,

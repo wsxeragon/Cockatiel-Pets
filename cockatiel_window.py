@@ -11,9 +11,10 @@ from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
 from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBox, QProgressDialog
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS
-from config import get_base_dir, is_dev_mode
+from config import get_base_dir, is_dev_mode, is_poop_disabled, set_poop_disabled
 from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_updater_and_exit, APP_VERSION
+from poop_item_window import PoopItemWindow
 
 class CockatielWindow(QWidget):
     """原始灰玄凤鹦鹉主桌宠窗口 (透明通道、无边框、置顶)"""
@@ -108,6 +109,15 @@ class CockatielWindow(QWidget):
         self.idle_timer = QTimer(self)
         self.idle_timer.timeout.connect(self.on_idle_tick)
         self.idle_timer.start(60)
+
+        # 随地大小便动力学与实体管理 (前30分钟概率为0，30~60分钟概率从0线性增至100%)
+        self.active_poops: List[PoopItemWindow] = []
+        self.is_poop_disabled: bool = is_poop_disabled()
+        self.last_poop_time: float = time.time()
+        self.next_poop_target_time: float = self.last_poop_time + 3600.0
+        self.poop_timer = QTimer(self)
+        self.poop_timer.timeout.connect(self.on_poop_timer_tick)
+        self._schedule_next_poop()
 
         # 初始化位置 (屏幕右下角靠近任务栏，完全限制在可用可视区域内)
         rect = self.get_screen_rect(use_available=True)
@@ -630,6 +640,128 @@ class CockatielWindow(QWidget):
         if self.hud_window:
             self.hud_window.update_view()
 
+    def get_poop_probability(self) -> float:
+        """
+        计算当前排便发生概率 (0.0 ~ 1.0):
+        - 开启‘禁止随地大小便’时固定为 0.0
+        - 每次排便完重置为 0.0
+        - 前 30 分钟 (0 ~ 1800 秒) 概率严格保持为 0.0，不产生任何增长
+        - 30 ~ 60 分钟 (1800 ~ 3600 秒) 随着时间流逝，概率从 0.0 线性增至 1.0 (0% ~ 100%)
+        - 超过 60 分钟 (>= 3600 秒) 概率为 1.0 (100% 必然发生便意)
+        """
+        if self.is_poop_disabled:
+            return 0.0
+        elapsed = time.time() - self.last_poop_time
+        if elapsed < 1800.0:
+            return 0.0
+        elif elapsed >= 3600.0:
+            return 1.0
+        else:
+            return (elapsed - 1800.0) / 1800.0
+
+    def _schedule_next_poop(self):
+        """
+        根据概率动力学模型抽取下一次排便的目标触发时刻：
+        - 前 30 分钟概率为 0 (1800s 内绝不排便)
+        - 30 ~ 60 分钟内累计概率从 0% 均匀增长至 100%
+        - 逆变换抽样：next_time = last_poop_time + 1800 + random() * 1800
+        - 巡检定时器每 5 秒检查一次生理状态与目标时间
+        """
+        roll = random.random()
+        self.next_poop_target_time = self.last_poop_time + 1800.0 + roll * 1800.0
+        self.poop_timer.start(5000)
+
+    def on_poop_timer_tick(self):
+        """定期巡检排便生理状态 (每 5 秒)"""
+        if self.is_poop_disabled:
+            return
+        if self.is_dragging or self.is_flying:
+            return
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+            return
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP):
+            return
+
+        now = time.time()
+        elapsed = now - self.last_poop_time
+        # 前 30 分钟概率严格为 0，不排便
+        if elapsed < 1800.0:
+            return
+
+        # 达到目标排便时间点 (30~60分钟之间按概率到达)
+        if now >= self.next_poop_target_time:
+            self.trigger_poop("便意达到临界点，后退深蹲便便！")
+
+    def trigger_poop(self, reason: str = "后退深蹲排便") -> bool:
+        """触发后退深蹲排便行为 (非打断性动作)"""
+        if self.is_poop_disabled:
+            self.last_feedback = "当前已开启‘禁止随地大小便’，小玄凤忍住了便意~"
+            if self.hud_window:
+                self.hud_window.update_view()
+            return False
+        if self.is_dragging or self.is_flying:
+            return False
+        if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+            self.wake_up("被便意唤醒了")
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.POOP], 4.5, reason)
+        if self.hud_window:
+            self.hud_window.update_view()
+        return True
+
+    def spawn_poop_at_tail(self):
+        """在尾部排泄口位置生成大便实体悬浮窗并重置便意概率"""
+        if self.is_poop_disabled:
+            return
+
+        # 鸟面向左 (-1) 时，泄殖腔在右侧；面向右 (1) 时在左侧 (适配 26x22 紧凑马赛克大便)
+        if self.facing_direction == -1:
+            spawn_x = self.x() + 53
+        else:
+            spawn_x = self.x() + 21
+
+        spawn_y = self.y() + 50
+        poop = PoopItemWindow(spawn_x, spawn_y)
+        poop.cleaned.connect(self._on_poop_cleaned)
+        self.active_poops.append(poop)
+
+        # 排泄完成：便意概率立即重置为 0，开启下一轮生理周期
+        self.last_poop_time = time.time()
+        self._schedule_next_poop()
+
+        self.last_feedback = "噗嗤~ 原地留下一坨热腾腾的马赛克大便！"
+        if self.hud_window:
+            self.hud_window.update_view()
+
+    def _on_poop_cleaned(self, poop: PoopItemWindow):
+        if poop in self.active_poops:
+            self.active_poops.remove(poop)
+        self.last_feedback = "✨ 大便已被主人清理干净啦，桌面干干净净！"
+        if self.hud_window:
+            self.hud_window.update_view()
+
+    def toggle_disable_poop(self):
+        """切换是否禁止随地大小便，并保存至配置"""
+        self.is_poop_disabled = not self.is_poop_disabled
+        set_poop_disabled(self.is_poop_disabled)
+        if self.is_poop_disabled:
+            self.poop_timer.stop()
+            self.last_feedback = "🚯 已开启‘禁止随地大小便’"
+        else:
+            self._schedule_next_poop()
+            self.last_feedback = "💩 已允许自然排泄 (前30分概率为0，30~60分渐增至100%)"
+        if self.hud_window:
+            self.hud_window.update_view()
+
+    def closeEvent(self, event):
+        """主窗口关闭时清理所有活跃的大便实体"""
+        for poop in list(self.active_poops):
+            try:
+                poop.close()
+            except Exception:
+                pass
+        self.active_poops.clear()
+        super().closeEvent(event)
+
     def on_anim_frame_step(self):
         """动画帧步进"""
         frames = self.current_behavior.frames
@@ -673,10 +805,19 @@ class CockatielWindow(QWidget):
                         if self.hud_window:
                             self.hud_window.update_view()
                         return
+                    elif self.current_behavior.code == BehaviorType.POOP:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "呼~ 轻松舒爽！")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
                 if intervals and self.current_frame_index < len(intervals):
                     self.anim_timer.setInterval(intervals[self.current_frame_index])
+
+            # 后退深蹲排便：在第 9 帧泄殖腔释放瞬间，生成大便实体悬浮窗
+            if self.current_behavior.code == BehaviorType.POOP and self.current_frame_index == 9:
+                self.spawn_poop_at_tail()
             # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
             if self.current_behavior.code == BehaviorType.EXCITE_BONK:
                 frame_name = frames[self.current_frame_index]
@@ -771,6 +912,12 @@ class CockatielWindow(QWidget):
                 self.hud_window.update_view()
             return
 
+        # 2.3 鼠标悬停头部静止检测 (停留超过2秒且心态平和舒适 -> 主动低头求撸)
+        if self.update_head_hover(now=now):
+            if self.hud_window:
+                self.hud_window.update_view()
+            return
+
         # 3. 漫步走来走去 (Waddle)
         if self.current_behavior.code == BehaviorType.IDLE_WADDLE:
             cur_pos = self.pos()
@@ -830,8 +977,8 @@ class CockatielWindow(QWidget):
                 self.safe_move(new_x, cur_pos.y(), margin=10)
 
         # 4. 检查动作是否自然到期，抽取下一个动作
-        # 杂技踩球包含 300 帧完整舞台剧情 (含大谢幕与落地)，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
-        if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
+        # 杂技踩球与后退深蹲排便包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP):
             if self.hud_window:
                 self.hud_window.update_view()
             return
@@ -974,6 +1121,47 @@ class CockatielWindow(QWidget):
         # 其余区域 (背部、翅膀、腹部、尾巴、脚爪) 判定为躯干禁区
         return False
 
+    def update_head_hover(self, local_pos: Optional[QPoint] = None, now: Optional[float] = None) -> bool:
+        """检查鼠标悬停在头颈部的时间，停留超过 2 秒且心态平和舒适时才触发主动低头求撸"""
+        if now is None:
+            now = time.time()
+
+        # 拖拽中、飞行中、睡眠中、排便中、玩球中不触发悬停求撸
+        if self.is_dragging or self.is_flying or self.current_behavior.code in (
+            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL
+        ):
+            self.hover_head_start_time = None
+            return False
+
+        if local_pos is None:
+            local_pos = self.mapFromGlobal(QCursor.pos())
+
+        if self.is_head_neck_zone(local_pos):
+            if self.hover_head_start_time is None:
+                self.hover_head_start_time = now
+            else:
+                hover_dur = now - self.hover_head_start_time
+                # 鼠标靠近停留超过 2.0 秒，且心态平和舒适 (fright < 25.0) -> 主动低头求撸
+                if hover_dur >= 2.0 and self.mood.fright < 25.0:
+                    self.mood.hover_head_tick(0.05)
+                    triggered = False
+                    if self.current_behavior.code not in [BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF]:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], None,
+                                             "察觉到手停在头顶超过2秒，主动低头求撸")
+                        triggered = True
+                    # 触发后重置悬停计时，避免同一停留持续重复触发
+                    self.hover_head_start_time = None
+                    return triggered
+        else:
+            self.hover_head_start_time = None
+
+        return False
+
+    def leaveEvent(self, event):
+        """鼠标离开桌宠窗口时彻底重置头部悬停计时，防止移出后再移入时发生超时误触发"""
+        self.hover_head_start_time = None
+        super().leaveEvent(event)
+
     def mouseMoveEvent(self, event):
         pos = event.position().toPoint()
         now = time.time()
@@ -996,19 +1184,8 @@ class CockatielWindow(QWidget):
             self.last_feedback = "惊吓值超过80%，察觉到鼠标靠近，惊恐扇翅逃跑！"
             return
 
-        # 悬停在头颈部检测
-        if self.is_head_neck_zone(pos):
-            if self.hover_head_start_time is None:
-                self.hover_head_start_time = now
-            else:
-                hover_dur = now - self.hover_head_start_time
-                # 悬停超过 0.6 秒且心态平和舒适 -> 主动低头求撸
-                if hover_dur >= 0.6 and self.mood.fright < 25.0:
-                    self.mood.hover_head_tick(0.05)
-                    if self.current_behavior.code not in [BehaviorType.COMFORT_BOW, BehaviorType.COMFORT_FLUFF]:
-                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.COMFORT_BOW], None, "察觉到手停在头顶，主动低头求撸")
-        else:
-            self.hover_head_start_time = None
+        # 悬停在头颈部检测 (停留超过2秒才触发主动低头求撸)
+        self.update_head_hover(local_pos=pos, now=now)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -1028,6 +1205,7 @@ class CockatielWindow(QWidget):
 
             self.is_dragging = True
             self.drag_start_pos = pos
+            self.hover_head_start_time = None
 
             # 局部感应判定
             if self.is_head_neck_zone(pos):
@@ -1040,6 +1218,7 @@ class CockatielWindow(QWidget):
     def mouseReleaseEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.is_dragging = False
+            self.hover_head_start_time = None
             self.ensure_on_screen(margin=10)
             # 如果处于敲屏状态但被拖拽移离了屏幕边缘，立即切出敲屏
             if self.current_behavior.code == BehaviorType.EXCITE_BONK and not self.is_at_screen_edge(margin=50):
@@ -1232,20 +1411,28 @@ class CockatielWindow(QWidget):
             act_autostart.setEnabled(False)
             act_autostart.setText("🚀 开机自启 (仅支持Windows)")
 
+        # 4. 禁止随地大小便 (保存至配置)
+        act_disable_poop = menu.addAction("🚯 禁止随地大小便")
+        act_disable_poop.setCheckable(True)
+        act_disable_poop.setChecked(self.is_poop_disabled)
+
         menu.addSeparator()
 
-        # 4. 清空疲劳与 5. 强制睡眠 (发布版与开发版均保留的核心控制)
+        # 5. 清空疲劳与 6. 强制睡眠 (发布版与开发版均保留的核心控制)
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
 
         # 仅开发调试模式显示的注入选项
         if dev_mode:
             menu.addSeparator()
+            prob_pct = int(self.get_poop_probability() * 100)
+            elapsed_min = int((time.time() - self.last_poop_time) / 60)
             act_sing = menu.addAction("🎵 逗它开心吹口哨")
             act_hop = menu.addAction("🦘 移动雀跃小跳 (开心蹦跶)")
             act_bonk = menu.addAction("🥁 敲击屏幕边缘 (自嗨敲屏)")
             act_double_peck = menu.addAction("⚡ 连环双击啄桌 (兴奋连啄)")
             act_play_ball = menu.addAction("🔴 兴奋杂技踩球 (30秒巡游)")
+            act_poop = menu.addAction(f"💩 触发拉屎行为 (便意概率: {prob_pct}%, 已过{elapsed_min}分)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
             act_waddle = menu.addAction("🚶 摇晃溜达 (双模式漫步)")
             act_preen = menu.addAction("🪶 整理羽毛 (埋背理毛)")
@@ -1260,6 +1447,7 @@ class CockatielWindow(QWidget):
             act_bonk = None
             act_double_peck = None
             act_play_ball = None
+            act_poop = None
             act_peck = None
             act_waddle = None
             act_preen = None
@@ -1299,6 +1487,10 @@ class CockatielWindow(QWidget):
             if self.hud_window:
                 self.hud_window.update_view()
             QToolTip.showText(global_pos, tip_msg, self)
+        elif res == act_disable_poop:
+            self.toggle_disable_poop()
+            tip_msg = "🚯 已开启‘禁止随地大小便’" if self.is_poop_disabled else "💩 已允许自然排泄"
+            QToolTip.showText(global_pos, tip_msg, self)
         elif res == act_clear_fatigue:
             self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
         elif res == act_sleep:
@@ -1322,6 +1514,8 @@ class CockatielWindow(QWidget):
                 self.wake_up("被红球吸引醒来！")
             self.mood.excitement = max(self.mood.excitement, 75.0)
             self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_PLAY_BALL], None, "右键菜单触发：兴奋杂技踩球！")
+        elif act_poop and res == act_poop:
+            self.trigger_poop("右键菜单触发：后退深蹲排便！")
         elif act_peck and res == act_peck:
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被叫醒起来啄米")

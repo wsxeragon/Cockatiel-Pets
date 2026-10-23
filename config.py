@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # 当前应用版本号（不带 V 前缀）
-APP_VERSION = "0.0.7"
+APP_VERSION = "0.0.8"
 
 def get_base_dir() -> Path:
     """获取运行根目录（自动兼容 PyInstaller 打包环境与源码开发环境）"""
@@ -54,6 +54,34 @@ def save_dev_mode(dev_mode: bool) -> None:
         except Exception:
             data = {}
     data["dev_mode"] = dev_mode
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(cfg_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def is_poop_disabled() -> bool:
+    """获取是否禁止大小便配置 (默认 False，即允许自然排泄)"""
+    cfg_file = get_config_path()
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "disable_poop" in data and isinstance(data["disable_poop"], bool):
+                    return data["disable_poop"]
+        except Exception:
+            pass
+    return False
+
+def set_poop_disabled(disabled: bool) -> None:
+    """保存禁止大小便配置至 assets/app_config.json"""
+    cfg_file = get_config_path()
+    data = {}
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    data["disable_poop"] = disabled
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     with open(cfg_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

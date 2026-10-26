@@ -33,6 +33,7 @@ class BehaviorType(str, Enum):
     POOP = "POOP"
     EAT_PLANT = "EAT_PLANT"
     MAGIC_TRICK = "MAGIC_TRICK"
+    SKATEBOARD = "SKATEBOARD"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -183,6 +184,13 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=False,
         is_looping=False
     ),
+    BehaviorType.SKATEBOARD: BehaviorDef(
+        BehaviorType.SKATEBOARD, "极限滑板炫技", 2.0, -0.4, 0.2, 1.2, 8.0, 0.0,
+        [f"skateboard_{i}" for i in range(200)],
+        frame_interval_ms=40,
+        is_interruptible=False,
+        is_looping=False
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -213,6 +221,7 @@ EXCITED_BEHAVIORS = {
     BehaviorType.EXCITE_PLAY_BALL,
     BehaviorType.EAT_PLANT,
     BehaviorType.MAGIC_TRICK,
+    BehaviorType.SKATEBOARD,
     BehaviorType.MISCHIEF_CHEW,
 }
 
@@ -284,6 +293,8 @@ class MoodDynamics:
                 BehaviorType.IDLE_FLY: 0.65,
                 BehaviorType.EXCITE_PLAY_BALL: 0.05,
                 BehaviorType.EAT_PLANT: 0.04,
+                BehaviorType.MAGIC_TRICK: 0.04,
+                BehaviorType.SKATEBOARD: 0.05,
                 BehaviorType.EXCITE_HOP: 0.0019,
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,
@@ -425,6 +436,11 @@ class MoodDynamics:
             if (b_code in (BehaviorType.COMFORT_APPROACH, BehaviorType.COMFORT_BOW)
                     and not self.can_seek_petting()):
                 continue
+
+            # 滑板、魔术、踩红球设定为高阶兴奋动作，兴奋度 > 20 才允许自发触发
+            if b_code in (BehaviorType.SKATEBOARD, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL):
+                if self.excitement <= 20.0:
+                    continue
 
             w = b_def.base_weight \
                 + b_def.w_fright * self.fright \

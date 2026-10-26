@@ -101,8 +101,9 @@ class CockatielWindow(QWidget):
         self.main_timer.timeout.connect(self.on_main_tick)
         self.main_timer.start(100)
 
-        # 动画帧切换定时器
+        # 动画帧切换定时器 (使用高精度定时器保证高帧率平滑稳定)
         self.anim_timer = QTimer(self)
+        self.anim_timer.setTimerType(Qt.TimerType.PreciseTimer)
         self.anim_timer.timeout.connect(self.on_anim_frame_step)
         self.anim_timer.start(self.current_behavior.frame_interval_ms)
 
@@ -127,6 +128,14 @@ class CockatielWindow(QWidget):
 
         # 变魔术动画镜像状态记录 (面向右时镜像向右展开，连续多次瞬移时镜像交替免转身)
         self.is_magic_mirrored: bool = False
+
+        # 极限滑板动画状态记录 (真实桌面滑行、长边优先、短道提前跳下、往返镜像)
+        self.is_skateboard_mirrored: bool = False
+        self.skateboard_remaining_repeats: int = 0
+        self.skateboard_total_repeats: int = 2
+        self.skateboard_slide_dir: int = 1
+        self.skateboard_cruise_speed: float = 8.0
+        self.skateboard_dismount_frame: int = 69
 
         # 初始化位置 (屏幕右下角靠近任务栏，完全限制在可用可视区域内)
         rect = self.get_screen_rect(use_available=True)
@@ -479,6 +488,12 @@ class CockatielWindow(QWidget):
                 return pix.transformed(QTransform().scale(-1, 1))
             return pix
 
+        # 极限滑板动作：由 is_skateboard_mirrored 控制是否进行整体镜像翻转 (往返第二遍向左)
+        if self.current_behavior.code == BehaviorType.SKATEBOARD:
+            if getattr(self, 'is_skateboard_mirrored', False) and not pix.isNull():
+                return pix.transformed(QTransform().scale(-1, 1))
+            return pix
+
         # 啃咬植物动作：由 is_plant_chew_mirrored 控制是否进行整体镜像翻转
         if self.current_behavior.code == BehaviorType.EAT_PLANT:
             if getattr(self, 'is_plant_chew_mirrored', False) and not pix.isNull():
@@ -562,6 +577,16 @@ class CockatielWindow(QWidget):
                     self.waddle_mode = "straight_to_edge"
                 self.is_magic_mirrored = None
 
+            # 从滑板切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
+            if self.current_behavior and self.current_behavior.code == BehaviorType.SKATEBOARD and new_b_def.code != BehaviorType.SKATEBOARD:
+                self.skateboard_remaining_repeats = 0
+                is_mirrored = getattr(self, 'is_skateboard_mirrored', False)
+                restore_x = self.x() + 50
+                restore_y = self.y() + 14
+                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
+                self.facing_direction = -1 if is_mirrored else 1
+                self.is_skateboard_mirrored = False
+
             # 进入玩球时，临时扩容为 260x120 高清像素舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.EXCITE_PLAY_BALL:
                 rect = self.get_screen_rect(use_available=True)
@@ -630,6 +655,18 @@ class CockatielWindow(QWidget):
 
                 target_y = self.y() - 26
                 self.apply_window_geometry(target_x, target_y, 260, 120, margin=10)
+                duration = 60.0
+
+            # 进入滑板时，临时扩容为 200x110 舞台，并无缝贴合原站立点
+            if new_b_def.code == BehaviorType.SKATEBOARD:
+                if not getattr(self, 'skateboard_remaining_repeats', 0):
+                    self.skateboard_remaining_repeats = 2
+                    self.skateboard_total_repeats = self.skateboard_remaining_repeats
+                    self.prepare_skateboard_round(is_first_round=True)
+                target_x = self.x() - 50
+                target_y = self.y() - 14
+                self.apply_window_geometry(target_x, target_y, 200, 110, margin=10)
+                self.skateboard_exact_x = float(self.x())
                 duration = 60.0
 
             # 从兴奋类行为切出时 (打断或结束)，自动清空兴奋值
@@ -841,7 +878,7 @@ class CockatielWindow(QWidget):
             return
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK):
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
             return
 
         now = time.time()
@@ -973,6 +1010,82 @@ class CockatielWindow(QWidget):
             
         self.safe_move(rand_x, rand_y, margin=10)
 
+    def prepare_skateboard_round(self, is_first_round: bool = False):
+        """
+        初始化/重置单趟滑板的滑动方向与巡航距离：
+        1. 第一轮启动时：检测屏幕左右可用空间，智能选择‘长边’作为首次滑动的方向；
+           第二轮启动时：反转方向，向对侧（此时对侧为长边）往返滑回。
+        2. 根据可用滑动距离动态调整巡航时间：
+           若空间充裕（> 半个屏幕，如 >= 0.55 * screen_w 且 >= 900px），执行 54 帧全速长程巡航；
+           若空间有限（<= 半个屏幕），智能减少滑动时间，提前跳下滑板（在计算出的 dismount 帧直接切入第 69 帧，自然步入第 70 帧跃下展开）。
+        """
+        rect = self.get_screen_rect(use_available=True)
+        margin = 25
+        w = 200
+
+        # 当前 200 宽窗口的左右侧屏幕安全距离
+        cur_x = self.x() if self.width() == 200 else (self.x() - 50)
+        cur_x = max(rect.left() + margin, min(rect.right() - margin - w, cur_x))
+        dist_left = max(0, cur_x - (rect.left() + margin))
+        dist_right = max(0, (rect.right() - margin - w) - cur_x)
+
+        if is_first_round:
+            # 选择长边滑动：如果右边可用空间大，向右滑；如果左边可用空间大，向左滑
+            if dist_right >= dist_left:
+                self.skateboard_slide_dir = 1
+                self.is_skateboard_mirrored = False
+                self.facing_direction = 1
+                avail_dist = dist_right
+            else:
+                self.skateboard_slide_dir = -1
+                self.is_skateboard_mirrored = True
+                self.facing_direction = -1
+                avail_dist = dist_left
+        else:
+            # 后续轮次（如第二轮往返）：反转方向
+            self.skateboard_slide_dir = -getattr(self, 'skateboard_slide_dir', 1)
+            self.is_skateboard_mirrored = (self.skateboard_slide_dir == -1)
+            self.facing_direction = -1 if self.is_skateboard_mirrored else 1
+            avail_dist = dist_right if self.skateboard_slide_dir == 1 else dist_left
+
+        # 骑行距离估计为可以骑半个屏幕，不同屏幕尺寸动态计算 (25 FPS / 40ms 高帧率版)
+        target_ride_dist = rect.width() * 0.5
+        leap_dist = 35  # 飞离下板与减速刹车所需的位移 (frames 150..174 累计位移 35px)
+        buffer_dist = 20
+        target_cruise_dist = max(50.0, target_ride_dist - leap_dist)
+        full_cruise_frames = 133  # frame 17 to frame 149 inclusive (上板后滑板立即前行，全程不停顿)
+
+        # 动态计算巡航速度，使完整巡航刚好滑行半屏距离 (平缓舒适 4.0 ~ 14.0 px/帧)
+        cruise_speed = max(4.0, min(14.0, target_cruise_dist / full_cruise_frames))
+        self.skateboard_cruise_speed = cruise_speed
+        self.skateboard_exact_x = float(self.x())
+
+        usable_dist = max(0.0, avail_dist - leap_dist - buffer_dist)
+        if usable_dist >= target_cruise_dist:
+            # 空间充足（>= 半个屏幕）：完整滑行半屏距离
+            self.skateboard_dismount_frame = 149
+        else:
+            # 可用空间不足半个屏幕：按可用距离自适应减少滑动时间，提前跳下滑板！
+            actual_cruise_dist = max(30.0, usable_dist)
+            cruise_frames = max(16, min(125, int(actual_cruise_dist / self.skateboard_cruise_speed)))
+            self.skateboard_dismount_frame = min(149, 17 + cruise_frames)
+
+        current_round = getattr(self, 'skateboard_total_repeats', 2) - getattr(self, 'skateboard_remaining_repeats', 1) + 1
+        total_rounds = getattr(self, 'skateboard_total_repeats', 2)
+        dir_text = "向右" if self.skateboard_slide_dir == 1 else "向左"
+        if self.skateboard_dismount_frame < 149:
+            mode_text = f"半屏短道版 (第{self.skateboard_dismount_frame}帧提前跳下)"
+        else:
+            mode_text = f"25FPS丝滑半屏巡航版 (预计滑行: {int(target_ride_dist)}px, 速度: {self.skateboard_cruise_speed:.1f}px/帧)"
+        self.last_feedback = f"🛹 极限滑板第 {current_round}/{total_rounds} 轮！{dir_text}滑向长边 ({mode_text})"
+
+    def trigger_skateboard(self, reason: str = "极限滑板炫技", repeats: int = 2):
+        """触发极限滑板炫技，默认播放 2 遍往返（智能长边滑动与短道提前跳下）"""
+        self.skateboard_remaining_repeats = max(1, repeats)
+        self.skateboard_total_repeats = self.skateboard_remaining_repeats
+        self.prepare_skateboard_round(is_first_round=True)
+        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.SKATEBOARD], None, f"{reason} (往返 {repeats} 趟)")
+
     def closeEvent(self, event):
         """主窗口关闭时清理所有活跃的大便实体"""
         for poop in list(self.active_poops):
@@ -1071,6 +1184,23 @@ class CockatielWindow(QWidget):
                             if self.hud_window:
                                 self.hud_window.update_view()
                             return
+                    elif self.current_behavior.code == BehaviorType.SKATEBOARD:
+                        if getattr(self, 'skateboard_remaining_repeats', 1) > 1:
+                            self.skateboard_remaining_repeats -= 1
+                            self.current_frame_index = 0
+                            self.action_end_time = time.time() + 60.0
+                            # 初始化下一轮：反转方向，计算对侧可用距离，若只有半屏则减少滑动时间提前跳下
+                            self.prepare_skateboard_round(is_first_round=False)
+                            self.update()
+                            if self.hud_window:
+                                self.hud_window.update_view()
+                            return
+                        else:
+                            self.skateboard_remaining_repeats = 0
+                            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 4.0, "滑板炫技圆满谢幕！炫酷落地发呆~")
+                            if self.hud_window:
+                                self.hud_window.update_view()
+                            return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
                 if intervals and self.current_frame_index < len(intervals):
@@ -1119,6 +1249,47 @@ class CockatielWindow(QWidget):
                         self.hop_direction = -1
                         self.facing_direction = -1
                     self.safe_move(new_x, self.y(), margin=10)
+            # 极限滑板：真实桌面高帧率丝滑滑动位移与智能提前跳下处理 (25 FPS / 40ms)
+            elif self.current_behavior.code == BehaviorType.SKATEBOARD:
+                f = self.current_frame_index
+                slide_dir = getattr(self, 'skateboard_slide_dir', 1)
+                cruise_speed = getattr(self, 'skateboard_cruise_speed', 7.0)
+                dismount_frame = getattr(self, 'skateboard_dismount_frame', 149)
+
+                # 1. 物理位移计算 (第17帧玄风踩上滑板后立即向前平滑位移，使用浮点亚像素累加器消除微停顿)
+                dx_step = 0.0
+                if 17 <= f <= dismount_frame:
+                    dx_step = slide_dir * cruise_speed
+                elif 150 <= f <= 174:
+                    leap_speeds = {
+                        150: 3, 151: 3, 152: 3, 153: 3, 154: 2, 155: 2, 156: 2, 157: 2,
+                        158: 2, 159: 2, 160: 2, 161: 1, 162: 1, 163: 1, 164: 1, 165: 1,
+                        166: 1, 167: 1, 168: 1, 169: 1, 170: 0, 171: 0, 172: 0, 173: 0, 174: 0
+                    }
+                    dx_step = slide_dir * leap_speeds.get(f, 0)
+
+                if dx_step != 0.0:
+                    if not hasattr(self, 'skateboard_exact_x') or self.skateboard_exact_x is None:
+                        self.skateboard_exact_x = float(self.x())
+                    self.skateboard_exact_x += dx_step
+                    target_x = int(round(self.skateboard_exact_x))
+                    if target_x != self.x():
+                        self.safe_move(target_x, self.y(), margin=10)
+                        if self.x() != target_x:
+                            self.skateboard_exact_x = float(self.x())
+
+                # 2. 提前跳下判定：若在滑行区间 (17..149) 达到提前跳下帧或临近屏幕边缘，直接跳下（切至第 149 帧，下一帧自然步入第 150 帧跃下展开）
+                if 17 <= f < 150:
+                    reached_dismount = (f >= dismount_frame)
+                    rect = self.get_screen_rect(use_available=True)
+                    edge_close = False
+                    if slide_dir == 1:
+                        edge_close = (self.x() + self.width() >= rect.right() - 35)
+                    else:
+                        edge_close = (self.x() <= rect.left() + 35)
+
+                    if reached_dismount or edge_close:
+                        self.current_frame_index = 149
             self.update()
 
     def on_main_tick(self):
@@ -1242,8 +1413,8 @@ class CockatielWindow(QWidget):
                 self.safe_move(new_x, cur_pos.y(), margin=10)
 
         # 4. 检查动作是否自然到期，抽取下一个动作
-        # 杂技踩球、后退深蹲排便、趣味啃咬植物与变魔术包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK):
+        # 杂技踩球、后退深蹲排便、趣味啃咬植物、变魔术与极限滑板包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
             if self.hud_window:
                 self.hud_window.update_view()
             return
@@ -1311,13 +1482,19 @@ class CockatielWindow(QWidget):
                 return
             is_edge = self.is_at_screen_edge(margin=50)
             next_b_def, duration = self.mood.select_next_behavior(self.current_behavior.code, is_at_edge=is_edge)
-            # 特殊情况: 如果抽取到飞行
+            # 特殊情况: 如果抽取到飞行或大舞台特技
             if next_b_def.code == BehaviorType.FRIGHT_PANIC_FLY:
                 self.start_flight(panic=True)
             elif next_b_def.code == BehaviorType.COMFORT_APPROACH:
                 self.start_flight(panic=False)
             elif next_b_def.code == BehaviorType.IDLE_FLY:
                 self.start_flight(panic=False, roam=True)
+            elif next_b_def.code == BehaviorType.MAGIC_TRICK:
+                self.trigger_magic_trick("自发变魔术！")
+            elif next_b_def.code == BehaviorType.SKATEBOARD:
+                self.trigger_skateboard("自发极限滑板炫技！")
+            elif next_b_def.code == BehaviorType.EAT_PLANT:
+                self.trigger_eat_plant("自发趣味啃咬植物！")
             else:
                 self.switch_behavior(next_b_def, duration, f"自发切换到: {next_b_def.name_cn}")
 
@@ -1391,9 +1568,9 @@ class CockatielWindow(QWidget):
         if now is None:
             now = time.time()
 
-        # 拖拽中、飞行中、睡眠中、排便中、玩球中、啃植物中、变魔术中不触发悬停求撸
+        # 拖拽中、飞行中、睡眠中、排便中、玩球中、啃植物中、变魔术中、玩滑板中不触发悬停求撸
         if self.is_dragging or self.is_flying or self.current_behavior.code in (
-            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK
+            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD
         ):
             self.hover_head_start_time = None
             return False
@@ -1463,8 +1640,8 @@ class CockatielWindow(QWidget):
                 self.wake_up("被鼠标点击吵醒了")
                 return
 
-            # 玩球、啃咬植物、变魔术等大舞台动作播放期间，禁止鼠标拖拽与触摸打断
-            if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK):
+            # 玩球、啃咬植物、变魔术、极限滑板等大舞台动作播放期间，禁止鼠标拖拽与触摸打断
+            if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
                 return
 
             # 检查点击点是否命中非透明羽毛
@@ -1857,6 +2034,7 @@ class CockatielWindow(QWidget):
             act_play_ball = menu.addAction("🔴 兴奋杂技踩球 (30秒巡游)")
             act_eat_plant = menu.addAction("🌿 趣味啃咬植物 (自适应嚼叶啃树枝)")
             act_magic = menu.addAction("🎩 变魔术大巡游 (红幕跨屏瞬移)")
+            act_skateboard = menu.addAction("🛹 极限滑板炫技 (两遍镜像往返)")
             act_poop = menu.addAction(f"💩 触发拉屎行为 (便意概率: {prob_pct}%, 已过{elapsed_min}分)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
             act_waddle = menu.addAction("🚶 摇晃溜达 (双模式漫步)")
@@ -1874,6 +2052,7 @@ class CockatielWindow(QWidget):
             act_play_ball = None
             act_eat_plant = None
             act_magic = None
+            act_skateboard = None
             act_poop = None
             act_peck = None
             act_waddle = None
@@ -1949,6 +2128,10 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被魔术表演唤醒！")
             self.trigger_magic_trick("右键菜单触发：红色幕布变魔术！")
+        elif act_skateboard and res == act_skateboard:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+                self.wake_up("被滑板吸引醒来！")
+            self.trigger_skateboard("右键菜单触发：极限滑板炫技！")
         elif act_poop and res == act_poop:
             self.trigger_poop("右键菜单触发：后退深蹲排便！")
         elif act_peck and res == act_peck:

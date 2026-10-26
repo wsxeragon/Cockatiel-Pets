@@ -10,6 +10,7 @@ class BehaviorType(str, Enum):
     IDLE_WADDLE = "IDLE_WADDLE"
     IDLE_PECK = "IDLE_PECK"
     IDLE_FLY = "IDLE_FLY"
+    EAT_PLANT = "EAT_PLANT"
     # 闲置搞事 / 拆家
     MISCHIEF_CHEW = "MISCHIEF_CHEW"
     # 舒适享受
@@ -31,9 +32,9 @@ class BehaviorType(str, Enum):
     EXCITE_DOUBLE_PECK = "EXCITE_DOUBLE_PECK"
     EXCITE_PLAY_BALL = "EXCITE_PLAY_BALL"
     POOP = "POOP"
-    EAT_PLANT = "EAT_PLANT"
     MAGIC_TRICK = "MAGIC_TRICK"
     SKATEBOARD = "SKATEBOARD"
+    UNICYCLE = "UNICYCLE"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -75,6 +76,14 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         BehaviorType.IDLE_FLY, "日常短途飞行", 7.0, -0.4, 0.1, 0.0, 2.0, 0.4,
         ["fly_0", "fly_1", "fly_2", "fly_3"], frame_interval_ms=120,
         is_interruptible=False
+    ),
+    BehaviorType.EAT_PLANT: BehaviorDef(
+        BehaviorType.EAT_PLANT, "趣味啃咬植物", 4.0, -0.4, 0.3, 0.1, 22.0, 0.0,
+        [f"eat_plant_{i}" for i in range(138)],
+        frame_interval_ms=120,
+        frame_intervals_ms=[105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 110, 110, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 160, 130, 130, 130, 120, 120, 140, 140, 140, 130, 130, 140, 120, 140, 120, 140, 120, 140, 120, 150, 120, 120, 120, 120, 120, 120, 140, 140, 130, 130, 120, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105],
+        is_interruptible=True,
+        is_looping=False
     ),
     # 闲置搞事
     BehaviorType.MISCHIEF_CHEW: BehaviorDef(
@@ -169,14 +178,6 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=False,
         is_looping=False
     ),
-    BehaviorType.EAT_PLANT: BehaviorDef(
-        BehaviorType.EAT_PLANT, "趣味啃咬植物", 3.0, -0.4, 0.3, 1.0, 22.0, 0.0,
-        [f"eat_plant_{i}" for i in range(138)],
-        frame_interval_ms=120,
-        frame_intervals_ms=[105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 150, 110, 110, 110, 110, 140, 140, 140, 140, 140, 140, 140, 140, 140, 140, 160, 130, 130, 130, 120, 120, 140, 140, 140, 130, 130, 140, 120, 140, 120, 140, 120, 140, 120, 150, 120, 120, 120, 120, 120, 120, 140, 140, 130, 130, 120, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105, 105],
-        is_interruptible=True,
-        is_looping=False
-    ),
     BehaviorType.MAGIC_TRICK: BehaviorDef(
         BehaviorType.MAGIC_TRICK, "红幕变魔术(瞬移)", 2.5, -0.4, 0.2, 1.2, 11.0, 0.0,
         [f"magic_trick_{i}" for i in range(110)],
@@ -187,6 +188,13 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     BehaviorType.SKATEBOARD: BehaviorDef(
         BehaviorType.SKATEBOARD, "极限滑板炫技", 2.0, -0.4, 0.2, 1.2, 8.0, 0.0,
         [f"skateboard_{i}" for i in range(200)],
+        frame_interval_ms=40,
+        is_interruptible=False,
+        is_looping=False
+    ),
+    BehaviorType.UNICYCLE: BehaviorDef(
+        BehaviorType.UNICYCLE, "独轮杂技特技", 2.0, -0.4, 0.2, 1.2, 20.0, 0.0,
+        [f"unicycle_{i}" for i in range(500)],
         frame_interval_ms=40,
         is_interruptible=False,
         is_looping=False
@@ -210,20 +218,27 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
     ),
 }
 
-# 兴奋类行为集 (仅在兴奋时才触发的行为；结束后自动清空兴奋值)
-EXCITED_BEHAVIORS = {
+# 高阶大舞台特技 (>=30% 兴奋度才触发；触发完自动清空兴奋槽)
+STAGE_STUNT_BEHAVIORS = {
+    BehaviorType.SKATEBOARD,
+    BehaviorType.UNICYCLE,
+    BehaviorType.MAGIC_TRICK,
+    BehaviorType.EXCITE_PLAY_BALL,
+}
+
+# 自嗨小动作 (>=15% 兴奋度才触发；触发完不清空兴奋槽；同一种自嗨动作不可连续触发)
+SELF_AMUSEMENT_BEHAVIORS = {
     BehaviorType.EXCITE_HOP,
     BehaviorType.EXCITE_BOB,
     BehaviorType.EXCITE_HEART_WINGS,
     BehaviorType.EXCITE_SING,
     BehaviorType.EXCITE_BONK,
     BehaviorType.EXCITE_DOUBLE_PECK,
-    BehaviorType.EXCITE_PLAY_BALL,
-    BehaviorType.EAT_PLANT,
-    BehaviorType.MAGIC_TRICK,
-    BehaviorType.SKATEBOARD,
     BehaviorType.MISCHIEF_CHEW,
 }
+
+# 所有兴奋类行为集 (兼容性联合集合)
+EXCITED_BEHAVIORS = STAGE_STUNT_BEHAVIORS | SELF_AMUSEMENT_BEHAVIORS
 
 class MoodDynamics:
     """四维心态动力学引擎"""
@@ -295,6 +310,7 @@ class MoodDynamics:
                 BehaviorType.EAT_PLANT: 0.04,
                 BehaviorType.MAGIC_TRICK: 0.04,
                 BehaviorType.SKATEBOARD: 0.05,
+                BehaviorType.UNICYCLE: 0.05,
                 BehaviorType.EXCITE_HOP: 0.0019,
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,
@@ -437,10 +453,19 @@ class MoodDynamics:
                     and not self.can_seek_petting()):
                 continue
 
-            # 滑板、魔术、踩红球设定为高阶兴奋动作，兴奋度 > 20 才允许自发触发
-            if b_code in (BehaviorType.SKATEBOARD, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL):
-                if self.excitement <= 20.0:
+            # 高阶大舞台特技：必须兴奋度 >= 30% 才允许自发触发
+            if b_code in STAGE_STUNT_BEHAVIORS:
+                if self.excitement < 30.0:
                     continue
+
+            # 自嗨小动作：必须兴奋度 >= 15% 才允许自发触发
+            if b_code in SELF_AMUSEMENT_BEHAVIORS:
+                if self.excitement < 15.0:
+                    continue
+
+            # 同一个自嗨小动作，绝对不可连续触发
+            if current_behavior in SELF_AMUSEMENT_BEHAVIORS and b_code == current_behavior:
+                continue
 
             w = b_def.base_weight \
                 + b_def.w_fright * self.fright \

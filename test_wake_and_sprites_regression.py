@@ -751,6 +751,54 @@ def test_poop_behavior_flow():
 
     print("PASS: test_poop_behavior_flow")
 
+def test_context_menu_poop_option_in_release_vs_dev():
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    from PySide6.QtWidgets import QMenu
+    from PySide6.QtCore import QPoint
+    from unittest.mock import patch
+
+    pet = CockatielWindow()
+
+    last_actions = []
+    class MockMenu(QMenu):
+        def exec(self, *args, **kwargs):
+            last_actions.clear()
+            last_actions.extend([a.text() for a in self.actions()])
+            return None
+
+    # 1. 验证发布模式 (is_dev_mode 返回 False)：右键菜单必须完全隐藏“禁止随地大小便”
+    with patch("cockatiel_window.QMenu", MockMenu):
+        with patch("cockatiel_window.is_dev_mode", return_value=False):
+            pet.show_context_menu(QPoint(10, 10))
+            assert len(last_actions) > 0, "发布模式右键菜单未成功构建"
+            assert not any("禁止随地大小便" in text for text in last_actions), \
+                f"发布版本右键菜单中严禁出现‘禁止随地大小便’选项！当前菜单为: {last_actions}"
+
+    # 2. 验证开发调试模式 (is_dev_mode 返回 True)：右键菜单正常保留“禁止随地大小便”以供测试
+    class MockMenuDev(QMenu):
+        def exec(self, *args, **kwargs):
+            last_actions.clear()
+            last_actions.extend([a.text() for a in self.actions()])
+            for a in self.actions():
+                if "禁止随地大小便" in a.text():
+                    return a
+            return None
+
+    with patch("cockatiel_window.QMenu", MockMenuDev):
+        with patch("cockatiel_window.is_dev_mode", return_value=True):
+            initial_state = pet.is_poop_disabled
+            pet.show_context_menu(QPoint(10, 10))
+            assert any("禁止随地大小便" in text for text in last_actions), \
+                f"开发模式右键菜单中应保留‘禁止随地大小便’选项以供调试！当前菜单为: {last_actions}"
+            assert pet.is_poop_disabled != initial_state, "开发模式下点击菜单应成功切换大小便禁用状态"
+
+    pet.close()
+    print("PASS: test_context_menu_poop_option_in_release_vs_dev")
+
 def test_head_hover_2s_trigger_flow():
     app = QApplication.instance()
     if app is None:
@@ -912,6 +960,7 @@ if __name__ == "__main__":
     test_head_pet_probabilistic_preen_flow()
     test_updater_version_and_integration()
     test_poop_behavior_flow()
+    test_context_menu_poop_option_in_release_vs_dev()
     test_head_hover_2s_trigger_flow()
     test_startup_fly_in_and_exit_fly_out_flow()
     print("ALL TESTS PASSED!")

@@ -111,7 +111,7 @@ class TestSkateboard(unittest.TestCase):
         pet.trigger_skateboard(repeats=1)
         self.assertEqual(pet.current_behavior.code, BehaviorType.SKATEBOARD)
         pos_after_entry_x = pet.x()
-        self.assertEqual(pos_after_entry_x, orig_100_x - 50)
+        self.assertEqual(pos_after_entry_x, orig_100_x - 51)
 
         # Step frames until finished
         pos_history = [pet.x()]
@@ -125,13 +125,15 @@ class TestSkateboard(unittest.TestCase):
         max_traveled_x = max(pos_history)
         self.assertGreater(max_traveled_x, pos_after_entry_x + 200, "Window must physically travel across desktop!")
 
-        # 2. Verify window smoothly restored to 100x80 at landing location
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
+        # 2. Verify window smoothly restored to 100x80 at landing location and directly enters IDLE_WADDLE for 10s
+        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_WADDLE)
         self.assertEqual(pet.width(), 100)
         self.assertEqual(pet.height(), 80)
         # Landing bird center at 200px was pet.x() + 100; restored bird center at 100px is (restore_x) + 50
         final_200_x = pos_history[-2]  # position right before switch_behavior restored
-        self.assertEqual(pet.x(), final_200_x + 50, "Zero-jump coordinate restoration at landing spot")
+        self.assertEqual(pet.x(), final_200_x + 51, "Zero-jump coordinate restoration at landing spot")
+        rem_dur = pet.action_end_time - pet.get_now()
+        self.assertAlmostEqual(rem_dur, 10.0, delta=0.5)
 
         pet.close()
         print("PASS: test_skateboard_real_desktop_movement_and_landing")
@@ -173,10 +175,12 @@ class TestSkateboard(unittest.TestCase):
             pet.on_anim_frame_step()
             r2_positions.append(pet.x())
 
-        # Round 2 should have moved leftwards (x decreased)
         self.assertLess(r2_positions[-1], r1_positions[-1], "Round 2 must slide back to the left across the screen!")
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
-        self.assertEqual(pet.facing_direction, -1, "Landed facing left, idle faces left")
+        # Directly enters 10s waddle without bow curtsey
+        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_WADDLE)
+        self.assertEqual(pet.facing_direction, -1, "Landed facing left, continues waddling facing left")
+        rem_dur = pet.action_end_time - pet.get_now()
+        self.assertAlmostEqual(rem_dur, 10.0, delta=0.5)
 
         pet.close()
         print("PASS: test_skateboard_two_round_mirrored_roundtrip")
@@ -363,35 +367,90 @@ class TestSkateboard(unittest.TestCase):
         pet.close()
         print("PASS: test_skateboard_mount_no_stopping")
 
-    def test_excited_behaviors_threshold_gt_20(self):
-        """Verify skateboard, magic trick, and playing ball are excited actions only triggered when excitement > 20"""
+    def test_excited_behaviors_rules(self):
+        """Verify stage stunts (>=30%), self-amusements (>=15%), anti-consecutive repeats, EAT_PLANT daily, and excitement clearing"""
         pet = CockatielWindow()
 
-        # 1. When excitement <= 20.0 (e.g. 0, 10, 20), none of the three can ever be chosen
-        for exc in [0.0, 10.0, 20.0]:
+        # 1. Stage stunts require excitement >= 30.0
+        for exc in [0.0, 10.0, 14.9, 20.0, 29.9]:
             pet.mood.excitement = exc
             pet.mood.fright = 0.0
             pet.mood.comfort = 50.0
-            for _ in range(200):
+            for _ in range(100):
                 chosen, _ = pet.mood.select_next_behavior()
                 self.assertNotIn(
                     chosen.code,
-                    (BehaviorType.SKATEBOARD, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL),
-                    f"{chosen.code} triggered when excitement was {exc} <= 20.0!"
+                    (BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL),
+                    f"{chosen.code} triggered when excitement was {exc} < 30.0!"
                 )
 
-        # 2. When excitement > 20.0 (e.g. 50.0), they become active candidates and can be chosen
-        pet.mood.excitement = 50.0
+        # 2. Stage stunts can be chosen when excitement >= 30.0
+        pet.mood.excitement = 60.0
         chosen_codes = set()
-        for _ in range(300):
+        for _ in range(400):
             chosen, _ = pet.mood.select_next_behavior()
             chosen_codes.add(chosen.code)
+        hit_stunt = any(code in chosen_codes for code in (BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL))
+        self.assertTrue(hit_stunt, "At excitement=60 (>=30), stage stunts must be eligible for selection!")
 
-        # At least one of the high-excitation behaviors should be picked in 300 trials at excitement=50
-        hit = any(code in chosen_codes for code in (BehaviorType.SKATEBOARD, BehaviorType.MAGIC_TRICK, BehaviorType.EXCITE_PLAY_BALL))
-        self.assertTrue(hit, "At excitement=50 (>20), excited behaviors must be eligible for selection!")
+        # 3. Self-amusement behaviors require excitement >= 15.0
+        for exc in [0.0, 5.0, 10.0, 14.9]:
+            pet.mood.excitement = exc
+            pet.mood.fright = 0.0
+            pet.mood.comfort = 50.0
+            for _ in range(100):
+                chosen, _ = pet.mood.select_next_behavior()
+                self.assertNotIn(
+                    chosen.code,
+                    (BehaviorType.EXCITE_HOP, BehaviorType.EXCITE_BOB, BehaviorType.EXCITE_SING, BehaviorType.EXCITE_DOUBLE_PECK, BehaviorType.MISCHIEF_CHEW),
+                    f"Self-amusement {chosen.code} triggered when excitement was {exc} < 15.0!"
+                )
+
+        # 4. Self-amusement behaviors can trigger when excitement >= 15.0 (e.g. 20.0)
+        pet.mood.excitement = 20.0
+        chosen_self = set()
+        for _ in range(400):
+            chosen, _ = pet.mood.select_next_behavior()
+            chosen_self.add(chosen.code)
+        hit_amusement = any(code in chosen_self for code in (BehaviorType.EXCITE_HOP, BehaviorType.EXCITE_BOB, BehaviorType.EXCITE_SING, BehaviorType.EXCITE_DOUBLE_PECK, BehaviorType.MISCHIEF_CHEW))
+        self.assertTrue(hit_amusement, "At excitement=20 (>=15), self-amusements must be eligible for selection!")
+
+        # 5. Anti-consecutive rule: the same self-amusement behavior can NEVER trigger consecutively
+        pet.mood.excitement = 50.0
+        for amusement_code in (BehaviorType.EXCITE_HOP, BehaviorType.EXCITE_BOB, BehaviorType.EXCITE_SING, BehaviorType.EXCITE_DOUBLE_PECK, BehaviorType.MISCHIEF_CHEW):
+            for _ in range(100):
+                chosen, _ = pet.mood.select_next_behavior(current_behavior=amusement_code)
+                self.assertNotEqual(
+                    chosen.code, amusement_code,
+                    f"Self-amusement {amusement_code} consecutively repeated!"
+                )
+
+        # 6. EAT_PLANT is daily behavior: can be chosen even when excitement < 15.0
+        pet.mood.excitement = 0.0
+        pet.mood.comfort = 60.0
+        chosen_daily = set()
+        for _ in range(500):
+            chosen, _ = pet.mood.select_next_behavior()
+            chosen_daily.add(chosen.code)
+        self.assertIn(BehaviorType.EAT_PLANT, chosen_daily, "EAT_PLANT is daily routine and should be selectable at excitement=0")
+
+        # 7. Excitement clearing: Stage stunts clear excitement upon exit; self-amusements do NOT
+        # Stage stunt exit clears excitement:
+        pet.mood.excitement = 60.0
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.SKATEBOARD], 10.0)
+        self.assertEqual(pet.mood.excitement, 60.0, "Excitement preserved during stunt")
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 10.0)
+        self.assertEqual(pet.mood.excitement, 0.0, "Excitement must be cleared after stage stunt finishes!")
+
+        # Self-amusement exit preserves excitement:
+        pet.mood.excitement = 25.0
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_BOB], 10.0)
+        self.assertEqual(pet.mood.excitement, 25.0)
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 10.0)
+        self.assertEqual(pet.mood.excitement, 25.0, "Excitement must NOT be cleared after self-amusement finishes!")
+
         pet.close()
-        print("PASS: test_excited_behaviors_threshold_gt_20")
+        print("PASS: test_excited_behaviors_rules")
 
 if __name__ == '__main__':
     unittest.main()

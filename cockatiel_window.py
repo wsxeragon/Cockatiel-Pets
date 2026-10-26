@@ -10,7 +10,7 @@ from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QRect
 from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
 from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBox, QProgressDialog
 
-from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS
+from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS, STAGE_STUNT_BEHAVIORS, SELF_AMUSEMENT_BEHAVIORS
 from config import get_base_dir, is_dev_mode, is_poop_disabled, set_poop_disabled
 from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_updater_and_exit, APP_VERSION
@@ -136,6 +136,11 @@ class CockatielWindow(QWidget):
         self.skateboard_slide_dir: int = 1
         self.skateboard_cruise_speed: float = 8.0
         self.skateboard_dismount_frame: int = 69
+
+        # 独轮杂技动画状态记录 (真实桌面漫游、方向自适应镜像、亚像素物理累加)
+        self.is_unicycle_mirrored: bool = False
+        self.unicycle_slide_dir: int = 1
+        self.unicycle_exact_x: Optional[float] = None
 
         # 初始化位置 (屏幕右下角靠近任务栏，完全限制在可用可视区域内)
         rect = self.get_screen_rect(use_available=True)
@@ -494,6 +499,12 @@ class CockatielWindow(QWidget):
                 return pix.transformed(QTransform().scale(-1, 1))
             return pix
 
+        # 独轮杂技动作：由 is_unicycle_mirrored 控制是否进行整体镜像翻转
+        if self.current_behavior.code == BehaviorType.UNICYCLE:
+            if getattr(self, 'is_unicycle_mirrored', False) and not pix.isNull():
+                return pix.transformed(QTransform().scale(-1, 1))
+            return pix
+
         # 啃咬植物动作：由 is_plant_chew_mirrored 控制是否进行整体镜像翻转
         if self.current_behavior.code == BehaviorType.EAT_PLANT:
             if getattr(self, 'is_plant_chew_mirrored', False) and not pix.isNull():
@@ -581,11 +592,58 @@ class CockatielWindow(QWidget):
             if self.current_behavior and self.current_behavior.code == BehaviorType.SKATEBOARD and new_b_def.code != BehaviorType.SKATEBOARD:
                 self.skateboard_remaining_repeats = 0
                 is_mirrored = getattr(self, 'is_skateboard_mirrored', False)
-                restore_x = self.x() + 50
+                restore_x = self.x() + (49 if is_mirrored else 51)
                 restore_y = self.y() + 14
-                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
-                self.facing_direction = -1 if is_mirrored else 1
+                exit_dir = -1 if is_mirrored else 1
                 self.is_skateboard_mirrored = False
+                self.skateboard_exact_x = None
+                self.current_behavior = new_b_def
+                self.current_frame_index = 0
+                if new_b_def.code == BehaviorType.IDLE_WADDLE:
+                    rect = self.get_screen_rect(use_available=True)
+                    min_x = rect.left() + 35
+                    max_x = rect.right() - 100 - 35
+                    if restore_x <= min_x:
+                        exit_dir = 1
+                    elif restore_x >= max_x:
+                        exit_dir = -1
+                    self.facing_direction = exit_dir
+                    self.waddle_direction = exit_dir
+                    self.waddle_origin_x = restore_x
+                    self.waddle_step_count = 0
+                    self.waddle_consecutive_steps = 0
+                    self.waddle_mode = "straight_to_edge"
+                else:
+                    self.facing_direction = exit_dir
+                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
+
+            # 从独轮杂技切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
+            if self.current_behavior and self.current_behavior.code == BehaviorType.UNICYCLE and new_b_def.code != BehaviorType.UNICYCLE:
+                is_mirrored = getattr(self, 'is_unicycle_mirrored', False)
+                restore_x = self.x() + (86 if is_mirrored else 54)
+                restore_y = self.y() + 68
+                exit_dir = -1 if is_mirrored else 1
+                self.is_unicycle_mirrored = False
+                self.unicycle_exact_x = None
+                self.current_behavior = new_b_def
+                self.current_frame_index = 0
+                if new_b_def.code == BehaviorType.IDLE_WADDLE:
+                    rect = self.get_screen_rect(use_available=True)
+                    min_x = rect.left() + 35
+                    max_x = rect.right() - 100 - 35
+                    if restore_x <= min_x:
+                        exit_dir = 1
+                    elif restore_x >= max_x:
+                        exit_dir = -1
+                    self.facing_direction = exit_dir
+                    self.waddle_direction = exit_dir
+                    self.waddle_origin_x = restore_x
+                    self.waddle_step_count = 0
+                    self.waddle_consecutive_steps = 0
+                    self.waddle_mode = "straight_to_edge"
+                else:
+                    self.facing_direction = exit_dir
+                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
 
             # 进入玩球时，临时扩容为 260x120 高清像素舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.EXCITE_PLAY_BALL:
@@ -663,14 +721,25 @@ class CockatielWindow(QWidget):
                     self.skateboard_remaining_repeats = 2
                     self.skateboard_total_repeats = self.skateboard_remaining_repeats
                     self.prepare_skateboard_round(is_first_round=True)
-                target_x = self.x() - 50
+                is_mirrored = getattr(self, 'is_skateboard_mirrored', False)
+                target_x = self.x() - (49 if is_mirrored else 51)
                 target_y = self.y() - 14
                 self.apply_window_geometry(target_x, target_y, 200, 110, margin=10)
                 self.skateboard_exact_x = float(self.x())
                 duration = 60.0
 
-            # 从兴奋类行为切出时 (打断或结束)，自动清空兴奋值
-            if self.current_behavior and self.current_behavior.code in EXCITED_BEHAVIORS and new_b_def.code not in EXCITED_BEHAVIORS:
+            # 进入独轮杂技时，临时扩容为 240x160 舞台，并无缝贴合原站立点
+            if new_b_def.code == BehaviorType.UNICYCLE:
+                self.prepare_unicycle_stunt()
+                is_mirrored = getattr(self, 'is_unicycle_mirrored', False)
+                target_x = self.x() - (86 if is_mirrored else 54)
+                target_y = self.y() - 68
+                self.apply_window_geometry(target_x, target_y, 240, 160, margin=10)
+                self.unicycle_exact_x = float(self.x())
+                duration = 60.0
+
+            # 从高阶大舞台特技切出时 (打断或结束)，自动清空兴奋值 (自嗨小动作不清空兴奋槽)
+            if old_behavior_code in STAGE_STUNT_BEHAVIORS:
                 self.mood.clear_excitement()
 
             self.current_behavior = new_b_def
@@ -716,8 +785,8 @@ class CockatielWindow(QWidget):
 
             # 摇晃溜达：初始化模式(起点来回踱步 vs 径直走碰屏幕)与初始方向
             if new_b_def.code == BehaviorType.IDLE_WADDLE:
-                # 若是从啃咬植物或变魔术无缝衔接切入，保留已对齐的行走方向与模式，不作随机覆盖
-                if old_behavior_code not in (BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK):
+                # 若是从啃咬植物、变魔术、极限滑板或独轮杂技切入，保留已对齐的行走方向与模式，不作随机覆盖
+                if old_behavior_code not in (BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE):
                     self.waddle_origin_x = self.x()
                     self.waddle_consecutive_steps = 0
                     self.waddle_step_count = 0
@@ -878,7 +947,7 @@ class CockatielWindow(QWidget):
             return
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
             return
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE):
             return
 
         now = time.time()
@@ -1086,6 +1155,34 @@ class CockatielWindow(QWidget):
         self.prepare_skateboard_round(is_first_round=True)
         self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.SKATEBOARD], None, f"{reason} (往返 {repeats} 趟)")
 
+    def prepare_unicycle_stunt(self):
+        """初始化独轮杂技特技的方向与漫游参数"""
+        rect = self.get_screen_rect(use_available=True)
+        cur_x = self.x()
+        dist_right = rect.right() - (cur_x + 240)
+        dist_left = cur_x - rect.left()
+
+        # 优先朝可用空间更长的一侧骑行漫游
+        if dist_right >= dist_left or dist_right >= 250:
+            self.unicycle_slide_dir = 1
+            self.is_unicycle_mirrored = False
+            self.facing_direction = 1
+        else:
+            self.unicycle_slide_dir = -1
+            self.is_unicycle_mirrored = True
+            self.facing_direction = -1
+        self.unicycle_exact_x = float(self.x())
+        dir_text = "向右" if self.unicycle_slide_dir == 1 else "向左"
+        self.last_feedback = f"🎪 独轮杂技特技开演！{dir_text}平衡漫游~"
+
+    def trigger_unicycle(self, reason: str = "独轮杂技特技"):
+        """触发独轮杂技特技表演 (500 帧高帧率超长晃动平衡杂技)"""
+        if BehaviorType.UNICYCLE not in BEHAVIOR_CATALOG:
+            return
+        self.prepare_unicycle_stunt()
+        b_def = BEHAVIOR_CATALOG[BehaviorType.UNICYCLE]
+        self.switch_behavior(b_def, duration=20.0, feedback=f"🎪 {reason}")
+
     def closeEvent(self, event):
         """主窗口关闭时清理所有活跃的大便实体"""
         for poop in list(self.active_poops):
@@ -1197,10 +1294,15 @@ class CockatielWindow(QWidget):
                             return
                         else:
                             self.skateboard_remaining_repeats = 0
-                            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 4.0, "滑板炫技圆满谢幕！炫酷落地发呆~")
+                            self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 10.0, "滑板炫技圆满谢幕！开心漫步溜达10秒~")
                             if self.hud_window:
                                 self.hud_window.update_view()
                             return
+                    elif self.current_behavior.code == BehaviorType.UNICYCLE:
+                        self.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_WADDLE], 10.0, "独轮杂技圆满谢幕！开心漫步溜达10秒~")
+                        if self.hud_window:
+                            self.hud_window.update_view()
+                        return
             else:
                 self.current_frame_index = (self.current_frame_index + 1) % len(frames)
                 if intervals and self.current_frame_index < len(intervals):
@@ -1290,6 +1392,29 @@ class CockatielWindow(QWidget):
 
                     if reached_dismount or edge_close:
                         self.current_frame_index = 149
+            # 独轮杂技：真实桌面高帧率平滑漫游位移 (25 FPS / 40ms)
+            elif self.current_behavior.code == BehaviorType.UNICYCLE:
+                f = self.current_frame_index
+                slide_dir = getattr(self, 'unicycle_slide_dir', 1)
+                dx_step = 0.0
+                if 21 <= f < 450:
+                    rect = self.get_screen_rect(use_available=True)
+                    if slide_dir == 1 and (self.x() + self.width() >= rect.right() - 25):
+                        dx_step = 0.0
+                    elif slide_dir == -1 and (self.x() <= rect.left() + 25):
+                        dx_step = 0.0
+                    else:
+                        dx_step = slide_dir * 1.0
+
+                if dx_step != 0.0:
+                    if not hasattr(self, 'unicycle_exact_x') or self.unicycle_exact_x is None:
+                        self.unicycle_exact_x = float(self.x())
+                    self.unicycle_exact_x += dx_step
+                    target_x = int(round(self.unicycle_exact_x))
+                    if target_x != self.x():
+                        self.safe_move(target_x, self.y(), margin=10)
+                        if self.x() != target_x:
+                            self.unicycle_exact_x = float(self.x())
             self.update()
 
     def on_main_tick(self):
@@ -1373,10 +1498,9 @@ class CockatielWindow(QWidget):
                 self.waddle_step_count = 0
                 self.waddle_consecutive_steps = 0
 
-                # 触及屏幕边缘判定：兴奋值越高，触发敲边缘的概率越大
-                # 惊吓戒备状态下 (fright >= 40) 不会自嗨敲屏
-                if self.mood.fright < 40.0:
-                    # 兴奋度在 [0, 100]：兴奋度越高，敲屏概率平滑增长 (15% ~ 95%)
+                # 触及屏幕边缘判定：兴奋值 >= 15% 且非惊吓状态下触发敲屏
+                if self.mood.fright < 40.0 and self.mood.excitement >= 15.0:
+                    # 兴奋度在 [15, 100]：兴奋度越高，敲屏概率平滑增长 (15% ~ 95%)
                     bonk_prob = min(0.95, max(0.10, 0.15 + (self.mood.excitement / 100.0) * 0.80))
                     if random.random() < bonk_prob:
                         self.waddle_direction = 1 if hit_left else -1  # 敲击结束后调头折返
@@ -1413,17 +1537,17 @@ class CockatielWindow(QWidget):
                 self.safe_move(new_x, cur_pos.y(), margin=10)
 
         # 4. 检查动作是否自然到期，抽取下一个动作
-        # 杂技踩球、后退深蹲排便、趣味啃咬植物、变魔术与极限滑板包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
-        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
+        # 杂技踩球、后退深蹲排便、趣味啃咬植物、变魔术、极限滑板与独轮杂技包含完整剧本序列，由 on_anim_frame_step 自然播放完毕后收尾切出，跳过主循环强制超时
+        if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.POOP, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE):
             if self.hud_window:
                 self.hud_window.update_view()
             return
 
         if now >= self.action_end_time:
-            # 兴奋类动作 (如唱歌、心形翅膀、打节拍、小跳、拆家等) 结束后，自动清空兴奋值
-            if self.current_behavior.code in EXCITED_BEHAVIORS:
+            # 高阶大舞台特技结束后，自动清空兴奋值 (自嗨小动作不清空兴奋槽)
+            if self.current_behavior.code in STAGE_STUNT_BEHAVIORS:
                 self.mood.clear_excitement()
-                self.last_feedback = f"{self.current_behavior.name_cn}结束，兴奋值自动清空！"
+                self.last_feedback = f"{self.current_behavior.name_cn}结束，兴奋值已释放清空！"
 
             # 刚睡醒伸展完毕：平稳切入平静发呆站立
             if self.current_behavior.code in (BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS):
@@ -1493,6 +1617,8 @@ class CockatielWindow(QWidget):
                 self.trigger_magic_trick("自发变魔术！")
             elif next_b_def.code == BehaviorType.SKATEBOARD:
                 self.trigger_skateboard("自发极限滑板炫技！")
+            elif next_b_def.code == BehaviorType.UNICYCLE:
+                self.trigger_unicycle("自发独轮杂技特技！")
             elif next_b_def.code == BehaviorType.EAT_PLANT:
                 self.trigger_eat_plant("自发趣味啃咬植物！")
             else:
@@ -1568,9 +1694,9 @@ class CockatielWindow(QWidget):
         if now is None:
             now = time.time()
 
-        # 拖拽中、飞行中、睡眠中、排便中、玩球中、啃植物中、变魔术中、玩滑板中不触发悬停求撸
+        # 拖拽中、飞行中、睡眠中、排便中、玩球中、啃植物中、变魔术中、玩滑板中、独轮杂技中不触发悬停求撸
         if self.is_dragging or self.is_flying or self.current_behavior.code in (
-            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD
+            BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.POOP, BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE
         ):
             self.hover_head_start_time = None
             return False
@@ -1640,8 +1766,8 @@ class CockatielWindow(QWidget):
                 self.wake_up("被鼠标点击吵醒了")
                 return
 
-            # 玩球、啃咬植物、变魔术、极限滑板等大舞台动作播放期间，禁止鼠标拖拽与触摸打断
-            if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD):
+            # 玩球、啃咬植物、变魔术、极限滑板、独轮杂技等大舞台动作播放期间，禁止鼠标拖拽与触摸打断
+            if self.current_behavior.code in (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE):
                 return
 
             # 检查点击点是否命中非透明羽毛
@@ -2011,20 +2137,19 @@ class CockatielWindow(QWidget):
             act_autostart.setEnabled(False)
             act_autostart.setText("🚀 开机自启 (仅支持Windows)")
 
-        # 4. 禁止随地大小便 (保存至配置)
-        act_disable_poop = menu.addAction("🚯 禁止随地大小便")
-        act_disable_poop.setCheckable(True)
-        act_disable_poop.setChecked(self.is_poop_disabled)
-
         menu.addSeparator()
 
-        # 5. 清空疲劳与 6. 强制睡眠 (发布版与开发版均保留的核心控制)
+        # 4. 清空疲劳与 5. 强制睡眠 (发布版与开发版均保留的核心控制)
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
 
         # 仅开发调试模式显示的注入选项
         if dev_mode:
             menu.addSeparator()
+            # 调试功能：禁止随地大小便 (发布版隐藏)
+            act_disable_poop = menu.addAction("🚯 禁止随地大小便")
+            act_disable_poop.setCheckable(True)
+            act_disable_poop.setChecked(self.is_poop_disabled)
             prob_pct = int(self.get_poop_probability() * 100)
             elapsed_min = int((time.time() - self.last_poop_time) / 60)
             act_sing = menu.addAction("🎵 逗它开心吹口哨")
@@ -2035,6 +2160,7 @@ class CockatielWindow(QWidget):
             act_eat_plant = menu.addAction("🌿 趣味啃咬植物 (自适应嚼叶啃树枝)")
             act_magic = menu.addAction("🎩 变魔术大巡游 (红幕跨屏瞬移)")
             act_skateboard = menu.addAction("🛹 极限滑板炫技 (两遍镜像往返)")
+            act_unicycle = menu.addAction("🎪 独轮杂技特技 (500帧超长摇晃表演)")
             act_poop = menu.addAction(f"💩 触发拉屎行为 (便意概率: {prob_pct}%, 已过{elapsed_min}分)")
             act_peck = menu.addAction("🌾 闲置自然啄食 (单啄嚼米)")
             act_waddle = menu.addAction("🚶 摇晃溜达 (双模式漫步)")
@@ -2045,6 +2171,7 @@ class CockatielWindow(QWidget):
             act_fright = menu.addAction("⚡ 戳身反咬威慑 (嘴前辐射音波)")
             act_reset = menu.addAction("🔄 重置心态为平静")
         else:
+            act_disable_poop = None
             act_sing = None
             act_hop = None
             act_bonk = None
@@ -2053,6 +2180,7 @@ class CockatielWindow(QWidget):
             act_eat_plant = None
             act_magic = None
             act_skateboard = None
+            act_unicycle = None
             act_poop = None
             act_peck = None
             act_waddle = None
@@ -2064,9 +2192,9 @@ class CockatielWindow(QWidget):
             act_reset = None
 
         menu.addSeparator()
-        # 5. 检查更新
+        # 6. 检查更新
         act_check_update = menu.addAction(f"🚀 检查更新 (当前 {APP_VERSION})...")
-        # 6. 退出
+        # 7. 退出
         act_quit = menu.addAction("❌ 告别退出")
 
         res = menu.exec(global_pos)
@@ -2093,7 +2221,7 @@ class CockatielWindow(QWidget):
             if self.hud_window:
                 self.hud_window.update_view()
             QToolTip.showText(global_pos, tip_msg, self)
-        elif res == act_disable_poop:
+        elif act_disable_poop and res == act_disable_poop:
             self.toggle_disable_poop()
             tip_msg = "🚯 已开启‘禁止随地大小便’" if self.is_poop_disabled else "💩 已允许自然排泄"
             QToolTip.showText(global_pos, tip_msg, self)
@@ -2132,6 +2260,10 @@ class CockatielWindow(QWidget):
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被滑板吸引醒来！")
             self.trigger_skateboard("右键菜单触发：极限滑板炫技！")
+        elif act_unicycle and res == act_unicycle:
+            if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
+                self.wake_up("被独轮杂技吸引醒来！")
+            self.trigger_unicycle("右键菜单触发：独轮杂技特技！")
         elif act_poop and res == act_poop:
             self.trigger_poop("右键菜单触发：后退深蹲排便！")
         elif act_peck and res == act_peck:

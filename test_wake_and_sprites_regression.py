@@ -746,6 +746,34 @@ def test_poop_behavior_flow():
     pet.last_poop_time = now_t - 4800.0
     assert pet.get_poop_probability() == 1.0
 
+    # 7. 验证一键铲屎 (clean_all_poop) 清理屏幕上所有大便
+    p1 = PoopItemWindow(100, 100)
+    p2 = PoopItemWindow(200, 100)
+    p3 = PoopItemWindow(300, 100)
+    pet.active_poops.extend([p1, p2, p3])
+    p1.cleaned.connect(pet._on_poop_cleaned)
+    p2.cleaned.connect(pet._on_poop_cleaned)
+    p3.cleaned.connect(pet._on_poop_cleaned)
+    assert len(pet.active_poops) == 3
+
+    cleaned_count = pet.clean_all_poop("测试一键铲屎")
+    assert cleaned_count == 3
+    assert p1.state == "clean"
+    assert p2.state == "clean"
+    assert p3.state == "clean"
+
+    # 推进 4 帧清理闪烁
+    for _ in range(4):
+        p1._on_clean_tick()
+        p2._on_clean_tick()
+        p3._on_clean_tick()
+    assert len(pet.active_poops) == 0
+    assert "已清理桌面 3 坨便便" in pet.last_feedback
+
+    # 桌面没有便便时再次调用 clean_all_poop
+    assert pet.clean_all_poop() == 0
+    assert "没有便便需要清理" in pet.last_feedback
+
     # 清理关闭窗口
     pet.close()
 
@@ -777,8 +805,10 @@ def test_context_menu_poop_option_in_release_vs_dev():
             assert len(last_actions) > 0, "发布模式右键菜单未成功构建"
             assert not any("禁止随地大小便" in text for text in last_actions), \
                 f"发布版本右键菜单中严禁出现‘禁止随地大小便’选项！当前菜单为: {last_actions}"
+            assert any("一键铲屎" in text for text in last_actions), \
+                f"发布版本右键菜单中必须包含‘一键铲屎’选项！当前菜单为: {last_actions}"
 
-    # 2. 验证开发调试模式 (is_dev_mode 返回 True)：右键菜单正常保留“禁止随地大小便”以供测试
+    # 2. 验证开发调试模式 (is_dev_mode 返回 True)：右键菜单正常保留“禁止随地大小便”与“一键铲屎”以供测试
     class MockMenuDev(QMenu):
         def exec(self, *args, **kwargs):
             last_actions.clear()
@@ -794,7 +824,22 @@ def test_context_menu_poop_option_in_release_vs_dev():
             pet.show_context_menu(QPoint(10, 10))
             assert any("禁止随地大小便" in text for text in last_actions), \
                 f"开发模式右键菜单中应保留‘禁止随地大小便’选项以供调试！当前菜单为: {last_actions}"
+            assert any("一键铲屎" in text for text in last_actions), \
+                f"开发模式右键菜单中应保留‘一键铲屎’选项！当前菜单为: {last_actions}"
             assert pet.is_poop_disabled != initial_state, "开发模式下点击菜单应成功切换大小便禁用状态"
+
+    # 3. 验证点击“一键铲屎”成功触发 clean_all_poop
+    class MockMenuCleanPoop(QMenu):
+        def exec(self, *args, **kwargs):
+            for a in self.actions():
+                if "一键铲屎" in a.text():
+                    return a
+            return None
+
+    with patch("cockatiel_window.QMenu", MockMenuCleanPoop):
+        with patch.object(pet, "clean_all_poop", return_value=3) as mock_clean:
+            pet.show_context_menu(QPoint(10, 10))
+            mock_clean.assert_called_once()
 
     pet.close()
     print("PASS: test_context_menu_poop_option_in_release_vs_dev")

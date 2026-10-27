@@ -1003,9 +1003,30 @@ class CockatielWindow(QWidget):
     def _on_poop_cleaned(self, poop: PoopItemWindow):
         if poop in self.active_poops:
             self.active_poops.remove(poop)
-        self.last_feedback = "✨ 大便已被主人清理干净啦，桌面干干净净！"
+        if getattr(self, '_cleaning_all_remaining', 0) > 0:
+            self._cleaning_all_remaining -= 1
+        else:
+            self.last_feedback = "✨ 大便已被主人清理干净啦，桌面干干净净！"
         if self.hud_window:
             self.hud_window.update_view()
+
+    def clean_all_poop(self, reason: str = "一键铲屎") -> int:
+        """清理屏幕上所有活动的大便实体，播放金色星芒消散动画并清空大便"""
+        poops_to_clean = [p for p in self.active_poops if getattr(p, 'state', None) != "clean"]
+        count = len(poops_to_clean)
+        self._cleaning_all_remaining = count
+        for poop in poops_to_clean:
+            try:
+                poop.start_cleanup()
+            except Exception:
+                pass
+        if count > 0:
+            self.last_feedback = f"🧹 {reason}：已清理桌面 {count} 坨便便，桌面干干净净！"
+        else:
+            self.last_feedback = f"✨ {reason}：桌面干干净净，没有便便需要清理~"
+        if self.hud_window:
+            self.hud_window.update_view()
+        return count
 
     def toggle_disable_poop(self):
         """切换是否禁止随地大小便，并保存至配置"""
@@ -2139,9 +2160,10 @@ class CockatielWindow(QWidget):
 
         menu.addSeparator()
 
-        # 4. 清空疲劳与 5. 强制睡眠 (发布版与开发版均保留的核心控制)
+        # 4. 清空疲劳、5. 强制睡眠、6. 一键铲屎 (发布版与开发版均保留的核心控制)
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
+        act_clean_poop = menu.addAction("🧹 一键铲屎 (清理所有便便)")
 
         # 仅开发调试模式显示的注入选项
         if dev_mode:
@@ -2229,6 +2251,10 @@ class CockatielWindow(QWidget):
             self.clear_fatigue("右键菜单触发：疲劳度已直接清空！")
         elif res == act_sleep:
             self.force_sleep("右键菜单触发：疲劳度拉满，打瞌睡卧下入睡")
+        elif res == act_clean_poop:
+            count = self.clean_all_poop("右键菜单触发：一键铲屎！")
+            tip_msg = f"🧹 已清理 {count} 坨便便，桌面干干净净！" if count > 0 else "✨ 桌面很干净，没有便便需要清理哦~"
+            QToolTip.showText(global_pos, tip_msg, self)
         elif act_sing and res == act_sing:
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
                 self.wake_up("被歌声唤醒了")

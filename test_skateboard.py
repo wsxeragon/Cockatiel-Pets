@@ -125,15 +125,15 @@ class TestSkateboard(unittest.TestCase):
         max_traveled_x = max(pos_history)
         self.assertGreater(max_traveled_x, pos_after_entry_x + 200, "Window must physically travel across desktop!")
 
-        # 2. Verify window smoothly restored to 100x80 at landing location and directly enters IDLE_WADDLE for 10s
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_WADDLE)
+        # 2. Verify window smoothly restored to 100x80 at landing location and enters IDLE_BLINK for 1s daze, then IDLE_WADDLE
+        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
         self.assertEqual(pet.width(), 100)
         self.assertEqual(pet.height(), 80)
-        # Landing bird center at 200px was pet.x() + 100; restored bird center at 100px is (restore_x) + 50
         final_200_x = pos_history[-2]  # position right before switch_behavior restored
         self.assertEqual(pet.x(), final_200_x + 51, "Zero-jump coordinate restoration at landing spot")
         rem_dur = pet.action_end_time - pet.get_now()
-        self.assertAlmostEqual(rem_dur, 10.0, delta=0.5)
+        self.assertAlmostEqual(rem_dur, 1.0, delta=0.5)
+        self.assertEqual(pet.pending_next_behavior, BehaviorType.IDLE_WADDLE)
 
         pet.close()
         print("PASS: test_skateboard_real_desktop_movement_and_landing")
@@ -176,11 +176,12 @@ class TestSkateboard(unittest.TestCase):
             r2_positions.append(pet.x())
 
         self.assertLess(r2_positions[-1], r1_positions[-1], "Round 2 must slide back to the left across the screen!")
-        # Directly enters 10s waddle without bow curtsey
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_WADDLE)
-        self.assertEqual(pet.facing_direction, -1, "Landed facing left, continues waddling facing left")
+        # Enters 1.0s IDLE_BLINK followed by 5.0s IDLE_WADDLE
+        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
+        self.assertEqual(pet.facing_direction, -1, "Landed facing left, continues facing left")
         rem_dur = pet.action_end_time - pet.get_now()
-        self.assertAlmostEqual(rem_dur, 10.0, delta=0.5)
+        self.assertAlmostEqual(rem_dur, 1.0, delta=0.5)
+        self.assertEqual(pet.pending_next_behavior, BehaviorType.IDLE_WADDLE)
 
         pet.close()
         print("PASS: test_skateboard_two_round_mirrored_roundtrip")

@@ -722,9 +722,9 @@ def test_poop_behavior_flow():
     pet.last_poop_time = now_t - 1770.0
     assert pet.get_poop_probability() == 0.0
 
-    # 模拟恰好 30 分钟 (1800秒) -> 概率为 0.0
-    pet.last_poop_time = now_t - 1800.0
-    assert pet.get_poop_probability() == 0.0
+    # 模拟恰好 30 分钟 (1800秒) -> 概率为 0.0 (微秒时间戳浮动容差)
+    pet.last_poop_time = time.time() - 1800.0
+    assert pet.get_poop_probability() < 1e-3
 
     # 模拟 37.5 分钟 (2250秒，即 30~60 分钟的 25% 进度) -> 概率为 0.25
     pet.last_poop_time = now_t - 2250.0
@@ -942,7 +942,9 @@ def test_startup_fly_in_and_exit_fly_out_flow():
     assert pet.flight_purpose == "fly_in"
     assert pet.current_behavior.code == BehaviorType.IDLE_FLY
 
-    rect = pet.get_screen_rect(use_available=True)
+    # 基于飞入目标所在屏幕获取可视矩形，避免多显示器将屏幕外坐标误判为副屏内坐标
+    target_screen = QApplication.screenAt(pet.fly_target_pos.toPoint()) or QApplication.primaryScreen()
+    rect = target_screen.availableGeometry()
     # 起点必定在屏幕外 (x < rect.left() or x > rect.right() - w or y < rect.top())
     start_x = pet.fly_start_pos.x()
     start_y = pet.fly_start_pos.y()

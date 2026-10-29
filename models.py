@@ -35,6 +35,7 @@ class BehaviorType(str, Enum):
     MAGIC_TRICK = "MAGIC_TRICK"
     SKATEBOARD = "SKATEBOARD"
     UNICYCLE = "UNICYCLE"
+    TABLE_MISCHIEF = "TABLE_MISCHIEF"
     # 应激防御
     FRIGHT_ALERT = "FRIGHT_ALERT"
     FRIGHT_BITE = "FRIGHT_BITE"
@@ -199,6 +200,13 @@ BEHAVIOR_CATALOG: Dict[BehaviorType, BehaviorDef] = {
         is_interruptible=False,
         is_looping=False
     ),
+    BehaviorType.TABLE_MISCHIEF: BehaviorDef(
+        BehaviorType.TABLE_MISCHIEF, "桌霸大恶作剧", 2.0, -0.4, 0.2, 1.2, 16.0, 0.0,
+        [f"table_mischief_{i}" for i in range(400)],
+        frame_interval_ms=40,
+        is_interruptible=False,
+        is_looping=False
+    ),
     # 应激
     BehaviorType.FRIGHT_ALERT: BehaviorDef(
         BehaviorType.FRIGHT_ALERT, "警惕拉长身体", 2.0, 0.8, -0.4, 0.0, 2.5, 0.8,
@@ -224,6 +232,7 @@ STAGE_STUNT_BEHAVIORS = {
     BehaviorType.UNICYCLE,
     BehaviorType.MAGIC_TRICK,
     BehaviorType.EXCITE_PLAY_BALL,
+    # BehaviorType.TABLE_MISCHIEF,  # 暂隐藏：进入和退出衔接持续调优中
 }
 
 # 自嗨小动作 (>=15% 兴奋度才触发；触发完不清空兴奋槽；同一种自嗨动作不可连续触发)
@@ -311,6 +320,7 @@ class MoodDynamics:
                 BehaviorType.MAGIC_TRICK: 0.04,
                 BehaviorType.SKATEBOARD: 0.05,
                 BehaviorType.UNICYCLE: 0.05,
+                BehaviorType.TABLE_MISCHIEF: 0.05,
                 BehaviorType.EXCITE_HOP: 0.0019,
                 BehaviorType.EXCITE_BOB: 0.007,
                 BehaviorType.EXCITE_HEART_WINGS: 0.09,
@@ -443,8 +453,9 @@ class MoodDynamics:
         candidates: List[BehaviorDef] = []
 
         for b_code, b_def in BEHAVIOR_CATALOG.items():
-            # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生，打哈欠仅在理毛后概率触发，心形翅膀已隐藏)
-            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS, BehaviorType.COMFORT_YAWN, BehaviorType.EXCITE_HEART_WINGS):
+            # 过滤不可作为自发行为的动作 (如闪电咬只有在被戳瞬间发生，打哈欠仅在理毛后概率触发，
+            # 心形翅膀已隐藏；桌霸大恶作剧收尾衔接仍在调优，只允许右键菜单手动触发)
+            if b_code in (BehaviorType.FRIGHT_BITE, BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP, BehaviorType.REST_WAKE, BehaviorType.REST_WAKE_CURIOUS, BehaviorType.COMFORT_YAWN, BehaviorType.EXCITE_HEART_WINGS, BehaviorType.TABLE_MISCHIEF):
                 continue
             # 敲击屏幕 (EXCITE_BONK) 仅在处于屏幕边缘时才允许自发触发
             if b_code == BehaviorType.EXCITE_BONK and not is_at_edge:

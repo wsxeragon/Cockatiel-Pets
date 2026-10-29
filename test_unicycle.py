@@ -206,12 +206,13 @@ class TestUnicycle(unittest.TestCase):
         pet.current_frame_index = 499
         pet.on_anim_frame_step()
 
-        # Frame 499 completed -> should transition directly to IDLE_WADDLE for 10s
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_WADDLE)
+        # Frame 499 completed -> should transition to IDLE_BLINK for 1.0s, pending IDLE_WADDLE
+        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
         self.assertEqual(pet.width(), 100)
         self.assertEqual(pet.height(), 80)
         rem_dur = pet.action_end_time - pet.get_now()
-        self.assertAlmostEqual(rem_dur, 10.0, delta=0.5)
+        self.assertAlmostEqual(rem_dur, 1.0, delta=0.5)
+        self.assertEqual(pet.pending_next_behavior, BehaviorType.IDLE_WADDLE)
 
         pet.close()
         print("PASS: test_unicycle_full_playback_and_completion")

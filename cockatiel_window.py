@@ -7,7 +7,7 @@ import json
 from typing import Dict, Optional
 
 from PySide6.QtCore import Qt, QTimer, QPoint, QPointF, QRect
-from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
+from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon, QColor, QPolygon, QPen
 from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBox, QProgressDialog
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS, STAGE_STUNT_BEHAVIORS, SELF_AMUSEMENT_BEHAVIORS
@@ -66,6 +66,8 @@ class CockatielWindow(QWidget):
         # 大舞台收尾过渡：待应用的窗口几何 + 预合成的过渡帧
         self._pending_geometry: Optional[tuple] = None
         self._transition_pixmap: Optional[QPixmap] = None
+        self._double_peck_cache: dict = {}
+        self._bonk_fx_cache: dict = {}
 
         # 在线自动更新控制器
         self._update_checker: Optional[CheckUpdateWorker] = None
@@ -323,6 +325,10 @@ class CockatielWindow(QWidget):
             return
 
         self.sprites.clear()
+        if hasattr(self, '_double_peck_cache'):
+            self._double_peck_cache.clear()
+        if hasattr(self, '_bonk_fx_cache'):
+            self._bonk_fx_cache.clear()
         for file in os.listdir(target_dir):
             if file.endswith(".png"):
                 name = os.path.splitext(file)[0]
@@ -539,6 +545,14 @@ class CockatielWindow(QWidget):
             frame_name = frames[self.current_frame_index % len(frames)]
             pix = self.sprites.get(frame_name, self.sprites.get("idle_0", QPixmap()))
 
+        # 连环双击敲击音效特效 (嘴边经典惊吓拟声发声符号)
+        if self.current_behavior.code == BehaviorType.EXCITE_DOUBLE_PECK and not pix.isNull():
+            pix = self._compose_double_peck_fx(pix, self.current_frame_index % len(frames))
+        # 敲击屏幕边缘音效特效 (EXCITE_BONK 玻璃撞击清脆星芒)
+        if self.current_behavior.code == BehaviorType.EXCITE_BONK and not pix.isNull():
+            pix = self._compose_bonk_fx(pix, self.current_frame_index % len(frames))
+
+
         # 玩球动作自带完整左右舞台编排与朝向，不作全局镜像翻转
         if self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL:
             return pix
@@ -583,6 +597,185 @@ class CockatielWindow(QWidget):
                     return self.sprites[r_name]
             return pix.transformed(QTransform().scale(-1, 1))
         return pix
+
+    def _compose_double_peck_fx(self, base_pix: QPixmap, frame_idx: int) -> QPixmap:
+        """连环双击敲击音效特效：经典轻量漫画敲击星芒（精简减量版，清脆灵动，无刺眼大红与繁杂粗射线）"""
+        cache_key = (getattr(self, 'crest_style', 'classic'), frame_idx)
+        if not hasattr(self, '_double_peck_cache'):
+            self._double_peck_cache = {}
+        if cache_key in self._double_peck_cache:
+            return self._double_peck_cache[cache_key]
+
+        out = base_pix.copy()
+        p = QPainter(out)
+        p.setRenderHint(QPainter.Antialiasing, False)
+
+        bx, by = 12, 72  # 鸟嘴敲击地面接触坐标
+
+        def draw_star_4p(cx, cy, r_out, r_in, color):
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            poly = QPolygon([
+                QPoint(cx, cy - r_out),
+                QPoint(cx + r_in, cy - r_in),
+                QPoint(cx + r_out, cy),
+                QPoint(cx + r_in, cy + r_in),
+                QPoint(cx, cy + r_out),
+                QPoint(cx - r_in, cy + r_in),
+                QPoint(cx - r_out, cy),
+                QPoint(cx - r_in, cy - r_in)
+            ])
+            p.drawPolygon(poly)
+
+        def draw_star_8p(cx, cy, r_long, r_short, color):
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            pts = []
+            for i in range(16):
+                ang = i * (math.pi / 8.0)
+                r = r_long if (i % 2 == 0) else r_short
+                pts.append(QPoint(int(round(cx + r * math.cos(ang))), int(round(cy + r * math.sin(ang)))))
+            p.drawPolygon(QPolygon(pts))
+
+        def draw_arc_wave(cx, cy, radius, color, width=1):
+            pen = QPen(color, width)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            p.drawArc(QRect(cx - radius, cy - radius, radius * 2, radius * 2), 30 * 16, 120 * 16)
+
+        c_white = QColor(255, 255, 255)
+        c_yellow = QColor(255, 235, 70)
+        c_gold = QColor(255, 195, 45)
+        c_orange = QColor(255, 155, 40)
+
+        if frame_idx == 1:
+            # 第一次敲击 (Strike 1): 精巧 6px 金黄爆闪星 + 2条短小飞溅线 + 柔和接触微震
+            draw_star_8p(bx, by - 2, 6, 2, c_yellow)
+            draw_star_4p(bx, by - 2, 4, 1, c_white)
+            p.setPen(QPen(c_gold, 1))
+            p.drawLine(bx - 4, by - 5, bx - 8, by - 9)
+            p.setPen(QPen(c_white, 1))
+            p.drawLine(bx + 4, by - 5, bx + 8, by - 9)
+            p.setPen(QPen(c_gold, 1))
+            p.drawLine(bx - 5, by + 1, bx + 5, by + 1)
+            p.setPen(c_yellow)
+            p.drawPoint(bx - 6, by - 2)
+
+        elif frame_idx == 2:
+            # 第一次回弹 (Rebound 1): 单层轻柔微波弧 + 1颗升空微星
+            draw_arc_wave(bx, by, 11, QColor(255, 235, 90, 150), 1)
+            draw_star_4p(bx + 3, by - 8, 2, 1, c_white)
+
+        elif frame_idx == 3:
+            # 第二次连敲 (Strike 2): 适度饱满的 7.5px 暖橙/金黄星芒 (无刺眼大红) + 3条精巧小射线 + 桌面微震
+            draw_star_8p(bx, by - 2, 8, 3, c_orange)
+            draw_star_8p(bx, by - 2, 6, 2, c_yellow)
+            draw_star_4p(bx, by - 2, 4, 1, c_white)
+            p.setPen(QPen(c_gold, 1))
+            p.drawLine(bx - 5, by - 6, bx - 10, by - 11)
+            p.setPen(QPen(c_white, 1))
+            p.drawLine(bx, by - 7, bx, by - 12)
+            p.setPen(QPen(c_gold, 1))
+            p.drawLine(bx + 5, by - 6, bx + 10, by - 11)
+            p.setPen(QPen(c_orange, 1))
+            p.drawLine(bx - 6, by + 1, bx + 6, by + 1)
+            p.setPen(c_white)
+            p.drawPoint(bx - 8, by - 3)
+            p.setPen(c_yellow)
+            p.drawPoint(bx + 9, by - 3)
+
+        elif frame_idx == 4:
+            # 第二次回弹 (Rebound 2): 柔和单层音波弧向外消散
+            draw_arc_wave(bx, by, 14, QColor(255, 200, 70, 120), 1)
+            draw_star_4p(bx - 2, by - 11, 2, 1, QColor(255, 255, 255, 180))
+
+        elif frame_idx == 5:
+            # 舒展复位 (Recover): 仅余一点淡淡余辉散去
+            p.setPen(QColor(255, 240, 150, 90))
+            p.drawPoint(bx + 2, by - 14)
+
+        p.end()
+        self._double_peck_cache[cache_key] = out
+        return out
+
+    def _compose_bonk_fx(self, base_pix: QPixmap, frame_idx: int) -> QPixmap:
+        """啄屏幕边缘敲击音效特效：碰壁瞬间爆出清脆星芒与向内反冲飞溅线 (精简减量版)"""
+        # 仅在碰撞瞬间 (帧2) 与回弹瞬间 (帧3) 呈现特效
+        if frame_idx not in (2, 3):
+            return base_pix
+
+        cache_key = (getattr(self, 'crest_style', 'classic'), frame_idx)
+        if not hasattr(self, '_bonk_fx_cache'):
+            self._bonk_fx_cache = {}
+        if cache_key in self._bonk_fx_cache:
+            return self._bonk_fx_cache[cache_key]
+
+        out = base_pix.copy()
+        p = QPainter(out)
+        p.setRenderHint(QPainter.Antialiasing, False)
+
+        bx, by = 2, 40  # 鸟嘴碰击屏幕边缘接触坐标
+
+        def draw_star_4p(cx, cy, r_out, r_in, color):
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            poly = QPolygon([
+                QPoint(cx, cy - r_out),
+                QPoint(cx + r_in, cy - r_in),
+                QPoint(cx + r_out, cy),
+                QPoint(cx + r_in, cy + r_in),
+                QPoint(cx, cy + r_out),
+                QPoint(cx - r_in, cy + r_in),
+                QPoint(cx - r_out, cy),
+                QPoint(cx - r_in, cy - r_in)
+            ])
+            p.drawPolygon(poly)
+
+        def draw_star_8p(cx, cy, r_long, r_short, color):
+            p.setBrush(color)
+            p.setPen(Qt.NoPen)
+            pts = []
+            for i in range(16):
+                ang = i * (math.pi / 8.0)
+                r = r_long if (i % 2 == 0) else r_short
+                pts.append(QPoint(int(round(cx + r * math.cos(ang))), int(round(cy + r * math.sin(ang)))))
+            p.drawPolygon(QPolygon(pts))
+
+        def draw_vertical_arc_wave(cx, cy, radius, color, width=1):
+            pen = QPen(color, width)
+            p.setPen(pen)
+            p.setBrush(Qt.NoBrush)
+            # 弧线朝屏幕内侧 (+x 方向) 展开: -60度 到 +60度 (Qt 角度单位为 1/16 度)
+            p.drawArc(QRect(cx - radius, cy - radius, radius * 2, radius * 2), -60 * 16, 120 * 16)
+
+        c_white = QColor(255, 255, 255)
+        c_yellow = QColor(255, 235, 70)
+        c_gold = QColor(255, 195, 45)
+        c_orange = QColor(255, 155, 40)
+
+        if frame_idx == 2:
+            # 碰壁瞬间 (bonk_2): 6px 金黄爆闪星 + 纯白内星 + 3条向内弹射短飞溅线 + 屏幕边缘微震竖线
+            draw_star_8p(bx, by, 6, 2, c_yellow)
+            draw_star_4p(bx, by, 4, 1, c_white)
+            p.setPen(QPen(c_gold, 1))
+            p.drawLine(1, by - 6, 1, by + 6)
+            p.setPen(QPen(c_orange, 1))
+            p.drawLine(bx + 3, by - 3, bx + 8, by - 7)
+            p.setPen(QPen(c_white, 1))
+            p.drawLine(bx + 4, by, bx + 9, by)
+            p.setPen(QPen(c_yellow, 1))
+            p.drawLine(bx + 3, by + 3, bx + 8, by + 7)
+            p.setPen(c_white)
+            p.drawPoint(bx + 10, by - 4)
+
+        elif frame_idx == 3:
+            # 回弹瞬间 (bonk_3): 柔和同心波弧向内散开 + 1颗升空微星
+            draw_vertical_arc_wave(bx, by, 11, QColor(255, 235, 90, 140), 1)
+            draw_star_4p(bx + 7, by - 6, 2, 1, c_white)
+
+        p.end()
+        self._bonk_fx_cache[cache_key] = out
+        return out
 
     def switch_behavior(self, new_b_def: BehaviorDef, duration: Optional[float] = None, feedback: str = None):
         self.setUpdatesEnabled(False)
@@ -661,22 +854,19 @@ class CockatielWindow(QWidget):
                 self.skateboard_exact_x = None
                 self.current_behavior = new_b_def
                 self.current_frame_index = 0
-                if new_b_def.code == BehaviorType.IDLE_WADDLE:
-                    rect = self.get_screen_rect(use_available=True)
-                    min_x = rect.left() + 35
-                    max_x = rect.right() - 100 - 35
-                    if restore_x <= min_x:
-                        exit_dir = 1
-                    elif restore_x >= max_x:
-                        exit_dir = -1
-                    self.facing_direction = exit_dir
-                    self.waddle_direction = exit_dir
-                    self.waddle_origin_x = restore_x
-                    self.waddle_step_count = 0
-                    self.waddle_consecutive_steps = 0
-                    self.waddle_mode = "straight_to_edge"
-                else:
-                    self.facing_direction = exit_dir
+                rect = self.get_screen_rect(use_available=True)
+                min_x = rect.left() + 35
+                max_x = rect.right() - 100 - 35
+                if restore_x <= min_x:
+                    exit_dir = 1
+                elif restore_x >= max_x:
+                    exit_dir = -1
+                self.facing_direction = exit_dir
+                self.waddle_direction = exit_dir
+                self.waddle_origin_x = restore_x
+                self.waddle_step_count = 0
+                self.waddle_consecutive_steps = 0
+                self.waddle_mode = "straight_to_edge"
                 # 不在这里直接缩窗口：此刻 setUpdatesEnabled(False)，直接 setGeometry
                 # 会让系统拿旧的 200x110 画布按新的 100x80 窗口裁一刀，桌面闪一帧残图。
                 # 先记账，等刷新恢复后由 _flush_pending_geometry 贴好过渡帧再缩。
@@ -722,22 +912,19 @@ class CockatielWindow(QWidget):
                 self.unicycle_exact_x = None
                 self.current_behavior = new_b_def
                 self.current_frame_index = 0
-                if new_b_def.code == BehaviorType.IDLE_WADDLE:
-                    rect = self.get_screen_rect(use_available=True)
-                    min_x = rect.left() + 35
-                    max_x = rect.right() - 100 - 35
-                    if restore_x <= min_x:
-                        exit_dir = 1
-                    elif restore_x >= max_x:
-                        exit_dir = -1
-                    self.facing_direction = exit_dir
-                    self.waddle_direction = exit_dir
-                    self.waddle_origin_x = restore_x
-                    self.waddle_step_count = 0
-                    self.waddle_consecutive_steps = 0
-                    self.waddle_mode = "straight_to_edge"
-                else:
-                    self.facing_direction = exit_dir
+                rect = self.get_screen_rect(use_available=True)
+                min_x = rect.left() + 35
+                max_x = rect.right() - 100 - 35
+                if restore_x <= min_x:
+                    exit_dir = 1
+                elif restore_x >= max_x:
+                    exit_dir = -1
+                self.facing_direction = exit_dir
+                self.waddle_direction = exit_dir
+                self.waddle_origin_x = restore_x
+                self.waddle_step_count = 0
+                self.waddle_consecutive_steps = 0
+                self.waddle_mode = "straight_to_edge"
                 # 同为 240x160 -> 100x80 的大舞台收尾，走同一套"先贴帧再缩窗口"的过渡
                 self._pending_geometry = (restore_x, restore_y, 100, 80, 10)
 
@@ -863,6 +1050,7 @@ class CockatielWindow(QWidget):
                 self._next_crest = random.uniform(8000, 18000)
                 if old_behavior_code in (BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE):
                     # 特技演完后的惬意闭眼发呆：眼皮闭合 1.0s，随后自然步入溜达
+                    self._stunt_chained_idle = old_behavior_code
                     self._blink_until = 1000.0
                     self._breath_until = -1.0
                     self._next_blink = 3000.0
@@ -899,8 +1087,10 @@ class CockatielWindow(QWidget):
 
             # 摇晃溜达：初始化模式(起点来回踱步 vs 径直走碰屏幕)与初始方向
             if new_b_def.code == BehaviorType.IDLE_WADDLE:
-                # 若是从啃咬植物、变魔术、极限滑板或独轮杂技切入，保留已对齐的行走方向与模式，不作随机覆盖
-                if old_behavior_code not in (BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE, BehaviorType.TABLE_MISCHIEF):
+                # 若是从啃咬植物、变魔术、极限滑板或独轮杂技切入，或从特技闭眼发呆衔接切入，保留已对齐的行走方向与模式，不作随机覆盖
+                stunt_chained = getattr(self, '_stunt_chained_idle', None)
+                self._stunt_chained_idle = None
+                if old_behavior_code not in (BehaviorType.EAT_PLANT, BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE, BehaviorType.TABLE_MISCHIEF) and not stunt_chained:
                     self.waddle_origin_x = self.x()
                     self.waddle_consecutive_steps = 0
                     self.waddle_step_count = 0
@@ -1255,7 +1445,7 @@ class CockatielWindow(QWidget):
             self.facing_direction = -1 if self.is_skateboard_mirrored else 1
             avail_dist = dist_right if self.skateboard_slide_dir == 1 else dist_left
             if prev_mirrored != self.is_skateboard_mirrored:
-                offset_x = -14 if self.is_skateboard_mirrored else 14
+                offset_x = 4 if self.is_skateboard_mirrored else -4
                 self.safe_move(self.x() + offset_x, self.y(), margin=10)
 
         # 骑行距离估计为可以骑半个屏幕，不同屏幕尺寸动态计算 (25 FPS / 40ms 高帧率版)
@@ -1266,7 +1456,7 @@ class CockatielWindow(QWidget):
         full_cruise_frames = 133  # frame 17 to frame 149 inclusive (上板后滑板立即前行，全程不停顿)
 
         # 动态计算巡航速度，使完整巡航刚好滑行半屏距离 (平缓舒适 4.0 ~ 14.0 px/帧)
-        cruise_speed = max(4.0, min(14.0, target_cruise_dist / full_cruise_frames))
+        cruise_speed = max(2.0, min(14.0, target_cruise_dist / full_cruise_frames))
         self.skateboard_cruise_speed = cruise_speed
         self.skateboard_exact_x = float(self.x())
 
@@ -1607,8 +1797,15 @@ class CockatielWindow(QWidget):
             # 后退深蹲排便：在第 9 帧泄殖腔释放瞬间，生成大便实体悬浮窗
             if self.current_behavior.code == BehaviorType.POOP and self.current_frame_index == 9:
                 self.spawn_poop_at_tail()
+            # 连环双击：在触地撞击瞬间(帧1与帧3)给窗口极其轻微的 1px 物理触感下沉微震
+            if self.current_behavior.code == BehaviorType.EXCITE_DOUBLE_PECK:
+                f_idx = self.current_frame_index
+                if f_idx in (1, 3):
+                    self.safe_move(self.x(), self.y() + 1, margin=10)
+                elif f_idx in (2, 4):
+                    self.safe_move(self.x(), self.y() - 1, margin=10)
             # 嘴壳敲击屏幕边缘时：在撞击帧给窗口轻微 1px 物理微震
-            if self.current_behavior.code == BehaviorType.EXCITE_BONK:
+            elif self.current_behavior.code == BehaviorType.EXCITE_BONK:
                 frame_name = frames[self.current_frame_index]
                 if frame_name == "bonk_2":
                     shake_offset = -1 if self.facing_direction == -1 else 1

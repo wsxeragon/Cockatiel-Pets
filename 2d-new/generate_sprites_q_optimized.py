@@ -1105,7 +1105,7 @@ def render_bonk_screen_frame(frame_idx=0, crest_style="triple"):
         body_roll = -6
         tail_wag = 5
         step = 1
-        eye = "wide"
+        eye = "open"
         crest_mode = "bonk_impact_whip"
 
     elif frame_idx == 3:

@@ -116,6 +116,26 @@ class TestStuntExitTransition(unittest.TestCase):
         self._check_transition(pet, (200, 110), "多轮滑板")
         pet.close()
 
+    def test_skateboard_round2_mirrored_exit_uses_composed_transition_frame(self):
+        from PySide6.QtCore import QRect
+        pet = RecordingWindow()
+        pet.get_screen_rect = lambda use_available=True: QRect(0, 0, 1920, 1080)
+        pet.show()
+        pet.safe_move(500, 400, margin=10)
+        pet.trigger_skateboard("测试第二轮镜像收尾", repeats=2)
+        while pet.skateboard_remaining_repeats == 2:
+            pet.on_anim_frame_step()
+        self.assertEqual(pet.skateboard_remaining_repeats, 1)
+        self.assertTrue(pet.is_skateboard_mirrored, "Round 2 must be mirrored")
+        pet.current_frame_index = 199
+        self.app.processEvents()
+        pet.paint_log.clear()
+        pet.transition_canvases.clear()
+        pet.on_anim_frame_step()
+        self.app.processEvents()
+        self._check_transition(pet, (200, 110), "第二轮镜像滑板")
+        pet.close()
+
     def test_unicycle_exit_uses_composed_transition_frame(self):
         pet = self._finish_stunt(lambda p: p.trigger_unicycle("测试收尾"), 499)
         self._check_transition(pet, (240, 160), "独轮")

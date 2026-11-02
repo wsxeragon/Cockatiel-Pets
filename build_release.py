@@ -93,7 +93,8 @@ def main():
         f.write(readme_txt)
 
     # 写入空白 txt 文件作为 0.0.9 版本变更验证标志
-    with open(os.path.join(dist_folder, "version_0.0.9.txt"), "w", encoding="utf-8") as f:
+    from config import APP_VERSION
+    with open(os.path.join(dist_folder, f"version_{APP_VERSION}.txt"), "w", encoding="utf-8") as f:
         pass
 
     print("=== [4/4] 压缩打包绿色全量包与增量补丁包 ===")

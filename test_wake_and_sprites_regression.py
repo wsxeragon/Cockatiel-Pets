@@ -530,7 +530,7 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.0.9", f"APP_VERSION should be '0.0.9', got {APP_VERSION}"
+    assert APP_VERSION == "0.1.0", f"APP_VERSION should be '0.1.0', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）

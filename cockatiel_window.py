@@ -247,6 +247,22 @@ class CockatielWindow(QWidget):
         painter.end()
         return canvas
 
+    def _settle_pending_geometry(self):
+        """大舞台 → 大舞台 连跳时，先把"回到标准 100x80 画布"这条待办落地。
+
+        否则紧接着的"进入下一个大舞台"会拿还没收缩的旧窗口坐标去算落点，
+        而 switch_behavior 末尾又会把待办里的 100x80 应用一遍，最终窗口卡在
+        100x80、贴图却是 200x110，整段动画被 paintEvent 整帧丢弃（鸟直接消失）。
+        两次 setGeometry 都发生在 setUpdatesEnabled(False) 区间内，中间不会出画。
+        """
+        pending = getattr(self, '_pending_geometry', None)
+        if not pending:
+            return
+        self._pending_geometry = None
+        x, y, w, h, margin = pending
+        target_x, target_y = self._clamp_geometry(x, y, w, h, margin)
+        self.apply_window_geometry(target_x, target_y, w, h, margin=margin)
+
     def _flush_pending_geometry(self):
         """更新开关重新打开之后再换画布，保证屏幕上先有正确内容、再改窗口尺寸。"""
         pending = getattr(self, '_pending_geometry', None)
@@ -307,6 +323,20 @@ class CockatielWindow(QWidget):
         except Exception:
             pass
 
+    def _in_grand_stage(self) -> bool:
+        """当前行为是否在演"大舞台"（画布大于标准尺寸）：
+
+        滑板 200x110 / 独轮 240x160 / 踩球·变魔术 260x120 / 啃植物 240x90 / 桌霸 320x200。
+        大舞台期间窗口尺寸由舞台决定，不能按标准画布去 setFixedSize。
+        """
+        if not self.current_behavior or not self.current_behavior.frames:
+            return False
+        idle = self.sprites.get("idle_0")
+        stage = self.sprites.get(self.current_behavior.frames[0])
+        if idle is None or idle.isNull() or stage is None or stage.isNull():
+            return False
+        return (stage.width(), stage.height()) != (idle.width(), idle.height())
+
     def load_all_sprites(self, crest_style: Optional[str] = None):
         if crest_style:
             self.crest_style = crest_style
@@ -336,10 +366,14 @@ class CockatielWindow(QWidget):
                 self.sprites[name] = pix
 
         # 动态自适应精灵画布尺寸
+        # 大舞台动作播放期间（画布 200x110 / 240x160 / 260x120 / 320x200），窗口尺寸由舞台决定。
+        # 此时若按标准画布 setFixedSize(100,80)，贴图与窗口尺寸不符，paintEvent 会把每一帧
+        # 整帧丢弃，鸟会在舞台上直接消失直到演出结束。换羽冠只换贴图、不动窗口尺寸。
         if "idle_0" in self.sprites and not self.sprites["idle_0"].isNull():
             sw = self.sprites["idle_0"].width()
             sh = self.sprites["idle_0"].height()
-            self.setFixedSize(sw, sh)
+            if not self._in_grand_stage():
+                self.setFixedSize(sw, sh)
 
         self.save_crest_style(self.crest_style)
 
@@ -787,13 +821,15 @@ class CockatielWindow(QWidget):
             # 从玩球切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
             # 鸟在最后一帧展翅飞下地面并站立于 bcx=84, ground y=98
             # 标准 100x80 中，鸟中心 x=53, ground y=72
-            if self.current_behavior and self.current_behavior.code == BehaviorType.EXCITE_PLAY_BALL and new_b_def.code != BehaviorType.EXCITE_PLAY_BALL:
+            # 注意：必须用进入函数时抓取的 old_behavior_code 判定，SKATEBOARD/TABLE 分支中途会改写 current_behavior
+            if old_behavior_code == BehaviorType.EXCITE_PLAY_BALL and new_b_def.code != BehaviorType.EXCITE_PLAY_BALL:
                 restore_x = self.x() + 84 - 53
                 restore_y = self.y() + 98 - 72
-                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
+                # 260x120 -> 100x80 缩窗口同样走"先贴过渡帧再缩窗口"，否则会闪一帧被裁歪的残图
+                self._pending_geometry = (restore_x, restore_y, 100, 80, 10)
 
             # 从啃咬植物切出时：恢复标准 100x80 画布并无缝衔接鸟体当前屏幕坐标，绝不消失或瞬移
-            if self.current_behavior and self.current_behavior.code == BehaviorType.EAT_PLANT and new_b_def.code != BehaviorType.EAT_PLANT:
+            if old_behavior_code == BehaviorType.EAT_PLANT and new_b_def.code != BehaviorType.EAT_PLANT:
                 is_mirrored = getattr(self, 'is_plant_chew_mirrored', False)
                 if new_b_def.code == BehaviorType.IDLE_WADDLE:
                     # 自然完成：鸟在最后一帧位于 bx=125, by=10，无缝顺承至当前位置继续漫步
@@ -806,7 +842,9 @@ class CockatielWindow(QWidget):
                         target_x = self.x() + bx_end
                         exit_dir = 1
                     target_y = self.y() + by_end
-                    self.apply_window_geometry(target_x, target_y, 100, 80, margin=10)
+                    # 240x90 -> 100x80 收尾：同样先记账，由 _flush_pending_geometry 贴好过渡帧再缩窗口
+                    target_x, target_y = self._clamp_geometry(target_x, target_y, 100, 80, 10)
+                    self._pending_geometry = (target_x, target_y, 100, 80, 10)
                     self.facing_direction = exit_dir
                     self.waddle_direction = exit_dir
                     self.waddle_origin_x = target_x
@@ -817,10 +855,10 @@ class CockatielWindow(QWidget):
                     # 异常强行打断时：平稳恢复原站立坐标
                     orig_x = getattr(self, '_plant_chew_orig_x', self.x())
                     orig_y = getattr(self, '_plant_chew_orig_y', self.y())
-                    self.apply_window_geometry(orig_x, orig_y, 100, 80, margin=10)
+                    self._pending_geometry = (orig_x, orig_y, 100, 80, 10)
 
             # 从变魔术切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
-            if self.current_behavior and self.current_behavior.code == BehaviorType.MAGIC_TRICK and new_b_def.code != BehaviorType.MAGIC_TRICK:
+            if old_behavior_code == BehaviorType.MAGIC_TRICK and new_b_def.code != BehaviorType.MAGIC_TRICK:
                 self.magic_remaining_repeats = 0
                 is_mirrored = getattr(self, 'is_magic_mirrored', False)
                 if is_mirrored:
@@ -833,7 +871,9 @@ class CockatielWindow(QWidget):
                     restore_x = self.x() + 155
                     restore_y = self.y() + 26
                     exit_dir = 1
-                self.apply_window_geometry(restore_x, restore_y, 100, 80, margin=10)
+                # 260x120 -> 100x80 收尾（伴随最多 155px 的横向归位）：先记账，贴过渡帧后再缩窗口
+                restore_x, restore_y = self._clamp_geometry(restore_x, restore_y, 100, 80, 10)
+                self._pending_geometry = (restore_x, restore_y, 100, 80, 10)
                 self.facing_direction = exit_dir
                 if new_b_def.code == BehaviorType.IDLE_WADDLE:
                     self.waddle_direction = exit_dir
@@ -844,7 +884,7 @@ class CockatielWindow(QWidget):
                 self.is_magic_mirrored = None
 
             # 从滑板切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
-            if self.current_behavior and self.current_behavior.code == BehaviorType.SKATEBOARD and new_b_def.code != BehaviorType.SKATEBOARD:
+            if old_behavior_code == BehaviorType.SKATEBOARD and new_b_def.code != BehaviorType.SKATEBOARD:
                 self.skateboard_remaining_repeats = 0
                 is_mirrored = getattr(self, 'is_skateboard_mirrored', False)
                 restore_x = self.x() + (49 if is_mirrored else 51)
@@ -873,7 +913,7 @@ class CockatielWindow(QWidget):
                 self._pending_geometry = (restore_x, restore_y, 100, 80, 10)
 
             # 从桌霸恶作剧切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
-            if self.current_behavior and self.current_behavior.code == BehaviorType.TABLE_MISCHIEF and new_b_def.code != BehaviorType.TABLE_MISCHIEF:
+            if old_behavior_code == BehaviorType.TABLE_MISCHIEF and new_b_def.code != BehaviorType.TABLE_MISCHIEF:
                 orig_x = getattr(self, '_table_mischief_orig_x', None)
                 orig_y = getattr(self, '_table_mischief_orig_y', None)
                 if orig_x is None or orig_y is None:
@@ -900,10 +940,12 @@ class CockatielWindow(QWidget):
                     self.waddle_mode = "straight_to_edge"
                 else:
                     self.facing_direction = 1
-                self.apply_window_geometry(orig_x, orig_y, 100, 80, margin=10)
+                # 320x200 -> 100x80 收尾：先记账，贴过渡帧后再缩窗口
+                orig_x, orig_y = self._clamp_geometry(orig_x, orig_y, 100, 80, 10)
+                self._pending_geometry = (orig_x, orig_y, 100, 80, 10)
 
             # 从独轮杂技切出时 (无论是正常结束还是被打断)，恢复标准 100x80 画布并平滑对齐地面与鸟体坐标
-            if self.current_behavior and self.current_behavior.code == BehaviorType.UNICYCLE and new_b_def.code != BehaviorType.UNICYCLE:
+            if old_behavior_code == BehaviorType.UNICYCLE and new_b_def.code != BehaviorType.UNICYCLE:
                 is_mirrored = getattr(self, 'is_unicycle_mirrored', False)
                 restore_x = self.x() + (86 if is_mirrored else 54)
                 restore_y = self.y() + 68
@@ -930,6 +972,7 @@ class CockatielWindow(QWidget):
 
             # 进入玩球时，临时扩容为 260x120 高清像素舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.EXCITE_PLAY_BALL:
+                self._settle_pending_geometry()   # 大舞台→大舞台连跳：先把窗口归位到标准画布再算落点
                 rect = self.get_screen_rect(use_available=True)
                 target_x = self.x() + 53 - 175
                 target_y = self.y() + 72 - 98
@@ -941,6 +984,7 @@ class CockatielWindow(QWidget):
 
             # 进入啃咬植物时，临时扩容为 240x90 舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.EAT_PLANT:
+                self._settle_pending_geometry()
                 self._plant_chew_orig_x = self.x()
                 self._plant_chew_orig_y = self.y()
                 rect = self.get_screen_rect(use_available=True)
@@ -968,6 +1012,7 @@ class CockatielWindow(QWidget):
 
             # 进入变魔术时，临时扩容为 260x120 舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.MAGIC_TRICK:
+                self._settle_pending_geometry()
                 if not getattr(self, 'magic_remaining_repeats', 0):
                     self.magic_remaining_repeats = random.randint(1, 4)
                     self.magic_total_repeats = self.magic_remaining_repeats
@@ -1000,6 +1045,7 @@ class CockatielWindow(QWidget):
 
             # 进入滑板时，临时扩容为 200x110 舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.SKATEBOARD:
+                self._settle_pending_geometry()
                 if not getattr(self, 'skateboard_remaining_repeats', 0):
                     self.skateboard_remaining_repeats = random.randint(1, 3)
                     self.skateboard_total_repeats = self.skateboard_remaining_repeats
@@ -1013,6 +1059,7 @@ class CockatielWindow(QWidget):
 
             # 进入独轮杂技时，临时扩容为 240x160 舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.UNICYCLE:
+                self._settle_pending_geometry()
                 self.prepare_unicycle_stunt()
                 is_mirrored = getattr(self, 'is_unicycle_mirrored', False)
                 target_x = self.x() - (86 if is_mirrored else 54)
@@ -1023,6 +1070,7 @@ class CockatielWindow(QWidget):
 
             # 进入桌霸恶作剧时，临时扩容为 320x200 独立舞台，并无缝贴合原站立点
             if new_b_def.code == BehaviorType.TABLE_MISCHIEF:
+                self._settle_pending_geometry()
                 if self.width() != 320 or self.height() != 200:
                     self.prepare_table_mischief_stunt()
                     self._table_mischief_orig_x = self.x()

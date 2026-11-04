@@ -18,7 +18,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtGui import QImage
 from PySide6.QtWidgets import QApplication
 
-from models import BehaviorType
+from models import BehaviorType, BEHAVIOR_CATALOG
 from cockatiel_window import CockatielWindow
 
 
@@ -76,8 +76,8 @@ class TestStuntExitTransition(unittest.TestCase):
         self.app.processEvents()
         return pet
 
-    def _check_transition(self, pet, stage_size, stage_name):
-        self.assertEqual(pet.current_behavior.code, BehaviorType.IDLE_BLINK)
+    def _check_transition(self, pet, stage_size, stage_name, expect=BehaviorType.IDLE_BLINK):
+        self.assertEqual(pet.current_behavior.code, expect)
         self.assertEqual((pet.width(), pet.height()), (100, 80),
                          f"{stage_name}收尾后窗口必须回到标准 100x80 画布")
 
@@ -140,6 +140,65 @@ class TestStuntExitTransition(unittest.TestCase):
         pet = self._finish_stunt(lambda p: p.trigger_unicycle("测试收尾"), 499)
         self._check_transition(pet, (240, 160), "独轮")
         pet.close()
+
+    # --- 其余四个大舞台收尾：同样必须先贴过渡帧再缩窗口 ---
+
+    def test_play_ball_exit_uses_composed_transition_frame(self):
+        pet = self._finish_stunt(
+            lambda p: p.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.EXCITE_PLAY_BALL], None, "测试收尾"),
+            299)
+        self._check_transition(pet, (260, 120), "杂技踩球")
+        pet.close()
+
+    def test_magic_trick_exit_uses_composed_transition_frame(self):
+        pet = self._finish_stunt(lambda p: p.trigger_magic_trick("测试收尾", repeats=1), 109)
+        self._check_transition(pet, (260, 120), "变魔术", expect=BehaviorType.IDLE_WADDLE)
+        pet.close()
+
+    def test_eat_plant_exit_uses_composed_transition_frame(self):
+        pet = self._finish_stunt(lambda p: p.trigger_eat_plant("测试收尾"), 137)
+        self._check_transition(pet, (240, 90), "啃咬植物", expect=BehaviorType.IDLE_WADDLE)
+        pet.close()
+
+    def test_table_mischief_exit_uses_composed_transition_frame(self):
+        pet = RecordingWindow()
+        pet.show()
+        pet.safe_move(400, 400, margin=10)
+        pet.trigger_table_mischief("测试收尾", skip_pre_walk=True)
+        self.app.processEvents()
+        self.assertEqual((pet.width(), pet.height()), (320, 200))
+        pet.paint_log.clear()
+        pet.transition_canvases.clear()
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, "测试收尾")
+        self.app.processEvents()
+        self._check_transition(pet, (320, 200), "桌霸恶作剧")
+        pet.close()
+
+    def test_grand_stage_chain_keeps_window_and_sprite_in_sync(self):
+        """连着触发两个大舞台时，收尾待办的"回到 100x80"不能把下一个大舞台的窗口压扁。"""
+        pairs = [
+            (BehaviorType.SKATEBOARD, BehaviorType.UNICYCLE, (240, 160)),
+            (BehaviorType.UNICYCLE, BehaviorType.SKATEBOARD, (200, 110)),
+            (BehaviorType.MAGIC_TRICK, BehaviorType.SKATEBOARD, (200, 110)),
+            (BehaviorType.EXCITE_PLAY_BALL, BehaviorType.UNICYCLE, (240, 160)),
+            (BehaviorType.EAT_PLANT, BehaviorType.EXCITE_PLAY_BALL, (260, 120)),
+        ]
+        for first, second, expect_size in pairs:
+            pet = RecordingWindow()
+            pet.show()
+            pet.safe_move(400, 400, margin=10)
+            pet.switch_behavior(BEHAVIOR_CATALOG[first], 5.0, None)
+            self.app.processEvents()
+            pet.switch_behavior(BEHAVIOR_CATALOG[second], 5.0, None)
+            self.app.processEvents()
+            pix = pet.get_current_pixmap()
+            self.assertEqual((pet.width(), pet.height()), expect_size,
+                             f"{first.name}->{second.name} 窗口尺寸不对")
+            self.assertEqual((pix.width(), pix.height()), expect_size,
+                             f"{first.name}->{second.name} 贴图与窗口尺寸不符，整帧会被丢弃")
+            self.assertIsNone(pet._pending_geometry,
+                              f"{first.name}->{second.name} 收尾待办没有被消费，会回头把窗口再缩一次")
+            pet.close()
 
 
 if __name__ == '__main__':

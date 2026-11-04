@@ -334,6 +334,60 @@ def test_sprite_integrity():
 
     print("PASS: test_sprite_integrity")
 
+def test_crest_switch_during_grand_stage_keeps_canvas():
+    """大舞台演出中右键换羽冠：只换贴图，绝不能把窗口改回 100x80。
+
+    历史问题：load_all_sprites 里无条件 setFixedSize(idle_0 尺寸)，在大舞台期间会把窗口
+    从 200x110 / 260x120 压回 100x80，与当前贴图尺寸不符，paintEvent 逐帧整帧丢弃，
+    鸟会直接消失直到演出结束。
+    """
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+
+    pet = CockatielWindow()
+    pet.show()
+    pet.safe_move(500, 500, margin=10)
+    app.processEvents()
+
+    original_style = pet.crest_style
+    other_style = "triple" if original_style == "classic" else "classic"
+    pet.save_crest_style = lambda style: None   # 不写用户的 crest_config.json
+
+    try:
+        for code, size in ((BehaviorType.SKATEBOARD, (200, 110)),
+                           (BehaviorType.EXCITE_PLAY_BALL, (260, 120)),
+                           (BehaviorType.UNICYCLE, (240, 160)),
+                           (BehaviorType.MAGIC_TRICK, (260, 120))):
+            pet.switch_behavior(BEHAVIOR_CATALOG[code], 5.0, None)
+            app.processEvents()
+            assert (pet.width(), pet.height()) == size, f"{code.name} 舞台尺寸没准备好"
+
+            pet.switch_crest_style(other_style)
+            app.processEvents()
+            pix = pet.get_current_pixmap()
+            assert (pet.width(), pet.height()) == size, \
+                f"{code.name} 演出中换羽冠把窗口改成了 {pet.width()}x{pet.height()}"
+            assert (pix.width(), pix.height()) == size, \
+                f"{code.name} 换羽冠后贴图 {pix.width()}x{pix.height()} 与窗口不符，整帧会被丢弃"
+
+            pet.switch_crest_style(original_style)
+            app.processEvents()
+
+        # 演出结束照常回到标准画布
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, None)
+        app.processEvents()
+        assert (pet.width(), pet.height()) == (100, 80), "大舞台收尾后没有回到标准画布"
+        assert pet.crest_style == original_style, "测试没有还原用户原本的羽冠造型"
+    finally:
+        pet.crest_style = original_style
+        pet.close()
+
+    print("PASS: test_crest_switch_during_grand_stage_keeps_canvas")
+
+
 def test_head_chin_hit_zone():
     app = QApplication.instance()
     if app is None:
@@ -1002,6 +1056,7 @@ if __name__ == "__main__":
     test_yawn_behavior_flow()
     test_waddle_dual_mode_behavior()
     test_sprite_integrity()
+    test_crest_switch_during_grand_stage_keeps_canvas()
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()

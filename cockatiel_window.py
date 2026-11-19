@@ -22,8 +22,12 @@ class CockatielWindow(QWidget):
         super().__init__()
         self.is_exiting: bool = False # 退出离场飞行标记
         # 窗口属性: 无边框、置顶、桌面工具窗口 (不占用任务栏大窗口)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow)
+        # WindowDoesNotAcceptFocus -> Win32 的 WS_EX_NOACTIVATE：桌宠出现/被点击都不抢前台，
+        # 避免全屏游戏或其它全屏应用被这只小鸟夺走键鼠焦点（鼠标事件照常接收，拖拽/右键不受影响）。
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow
+                            | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setMouseTracking(True)
         self.setFixedSize(100, 80)
 

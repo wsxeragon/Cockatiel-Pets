@@ -20,8 +20,12 @@ class PoopItemWindow(QWidget):
 
     def __init__(self, start_x: int, start_y: int, target_y: Optional[int] = None, parent: Optional[QWidget] = None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow)
+        # WindowDoesNotAcceptFocus -> Win32 的 WS_EX_NOACTIVATE：窗口出现/被点击都不会抢前台。
+        # 缺了它，全屏游戏前台时这一坨新窗口会把游戏踢出全屏独占并夺走键鼠/手柄焦点。
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.SubWindow
+                            | Qt.WindowDoesNotAcceptFocus)
         self.setAttribute(Qt.WA_TranslucentBackground, True)
+        self.setAttribute(Qt.WA_ShowWithoutActivating, True)
         self.setAttribute(Qt.WA_DeleteOnClose, True)
         self.setFixedSize(26, 22)
         self.setCursor(Qt.PointingHandCursor)

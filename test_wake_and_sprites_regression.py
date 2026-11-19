@@ -388,6 +388,124 @@ def test_crest_switch_during_grand_stage_keeps_canvas():
     print("PASS: test_crest_switch_during_grand_stage_keeps_canvas")
 
 
+def test_hud_debug_action_panel_dev_vs_release():
+    """右键菜单（开发调试模式）里的动作要在仪表盘里也有一份；发布版仪表盘必须保持原样。"""
+    from unittest import mock
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from PySide6.QtWidgets import QPushButton
+    from cockatiel_window import CockatielWindow
+    from radar_hud import RadarHUD
+    from config import set_poop_disabled
+
+    pet = CockatielWindow()
+    for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer):
+        t.stop()
+    pet.show()
+    app.processEvents()
+
+    orig_poop = pet.is_poop_disabled
+    try:
+        # --- 开发调试模式：动作面板齐全，且每个动作都能真正注入 ---
+        with mock.patch("radar_hud.is_dev_mode", return_value=True):
+            hud = RadarHUD(pet)
+        pet.set_hud(hud)
+        keys = [k for k, _ in hud.DEBUG_ACTIONS]
+        for expected in ("sing", "hop", "bonk", "double_peck", "play_ball", "eat_plant",
+                         "magic", "skateboard", "unicycle", "poop", "peck", "waddle",
+                         "preen", "fluff", "yawn", "fly", "fright", "clean_poop",
+                         "toggle_poop", "reset_mood"):
+            assert expected in keys, f"仪表盘缺少右键菜单动作: {expected}"
+
+        for key in keys:
+            pet.fly_timer.stop()
+            pet.is_flying = False
+            pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, None)
+            app.processEvents()
+            hud.on_debug_action(key)
+            app.processEvents()
+
+        # 抽查：注入确实切到了对应行为；且从大舞台切出后窗口能回到标准画布
+        pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 3.0, None)
+        hud.on_debug_action("skateboard")
+        assert pet.current_behavior.code == BehaviorType.SKATEBOARD, "滑板注入失败"
+        hud.on_debug_action("sing")
+        app.processEvents()
+        assert pet.current_behavior.code == BehaviorType.EXCITE_SING, "吹口哨注入失败"
+        assert (pet.width(), pet.height()) == (100, 80), "从大舞台切出后窗口没回到标准画布"
+
+        # --- 发布版：仪表盘与改动前完全一致（尺寸不变、没有任何按钮）---
+        with mock.patch("radar_hud.is_dev_mode", return_value=False):
+            hud_release = RadarHUD(pet)
+        assert (hud_release.width(), hud_release.height()) == (320, 390), \
+            f"发布版仪表盘尺寸被改动: {hud_release.width()}x{hud_release.height()}"
+        assert hud_release.findChildren(QPushButton) == [], "发布版仪表盘不应出现任何按钮"
+        assert not hasattr(hud_release, "btn_toggle_poop"), "发布版仪表盘混入了调试面板"
+
+        hud.close()
+        hud_release.close()
+    finally:
+        pet.is_poop_disabled = orig_poop
+        set_poop_disabled(orig_poop)
+        pet.close()
+
+    print("PASS: test_hud_debug_action_panel_dev_vs_release")
+
+
+def test_windows_do_not_steal_foreground_focus():
+    """大便窗和桌宠窗必须是 WS_EX_NOACTIVATE（出现/被点击都不抢前台）。
+
+    否则全屏游戏前台时，新弹出来的大便窗会把游戏踢出全屏独占、夺走键鼠与手柄焦点。
+    这里同时验证"不抢焦点"没有影响鼠标点击交互。
+    """
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from PySide6.QtCore import Qt, QPointF
+    from PySide6.QtGui import QMouseEvent
+    from cockatiel_window import CockatielWindow
+    from poop_item_window import PoopItemWindow
+
+    pet = CockatielWindow()
+    for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer):
+        t.stop()
+    poop = PoopItemWindow(400, 400)
+
+    # 1. Qt 层的意图标志
+    for win, name in ((pet, "桌宠窗"), (poop, "大便窗")):
+        assert win.windowFlags() & Qt.WindowDoesNotAcceptFocus, f"{name} 缺少 WindowDoesNotAcceptFocus"
+        assert win.testAttribute(Qt.WA_ShowWithoutActivating), f"{name} 缺少 WA_ShowWithoutActivating"
+
+    # 2. Windows 真实窗口样式（离屏平台没有原生窗口，跳过）
+    if sys.platform == "win32" and QApplication.platformName() == "windows":
+        import ctypes
+        from ctypes import wintypes
+        u32 = ctypes.windll.user32
+        u32.GetWindowLongPtrW.restype = ctypes.c_ssize_t
+        u32.GetWindowLongPtrW.argtypes = [wintypes.HWND, ctypes.c_int]
+        for win, name in ((pet, "桌宠窗"), (poop, "大便窗")):
+            ex = u32.GetWindowLongPtrW(int(win.winId()), -20) & 0xffffffff
+            assert ex & 0x08000000, f"{name} 不是 WS_EX_NOACTIVATE (exstyle=0x{ex:08X})"
+
+    # 3. 不抢焦点不影响点击：点一下大便要能开始清理
+    if hasattr(poop, "fall_timer"):
+        poop.fall_timer.stop()
+    poop.state = "idle"
+    press = QMouseEvent(QMouseEvent.Type.MouseButtonPress, QPointF(5, 5),
+                        Qt.LeftButton, Qt.LeftButton, Qt.NoModifier)
+    poop.mousePressEvent(press)
+    assert poop.state == "clean", "大便窗不再响应鼠标点击了"
+
+    poop.clean_timer.stop()
+    poop.close()
+    pet.close()
+    print("PASS: test_windows_do_not_steal_foreground_focus")
+
+
 def test_head_chin_hit_zone():
     app = QApplication.instance()
     if app is None:
@@ -1057,6 +1175,8 @@ if __name__ == "__main__":
     test_waddle_dual_mode_behavior()
     test_sprite_integrity()
     test_crest_switch_during_grand_stage_keeps_canvas()
+    test_hud_debug_action_panel_dev_vs_release()
+    test_windows_do_not_steal_foreground_focus()
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()

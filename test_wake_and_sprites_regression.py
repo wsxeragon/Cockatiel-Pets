@@ -506,6 +506,123 @@ def test_windows_do_not_steal_foreground_focus():
     print("PASS: test_windows_do_not_steal_foreground_focus")
 
 
+def test_fullscreen_app_hides_pet_and_hud():
+    """全屏应用前台时桌宠与仪表盘自动隐身，退出后原样恢复，且全屏期间不生成大便窗。"""
+    from unittest import mock
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    from radar_hud import RadarHUD
+
+    pet = CockatielWindow()
+    for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer, pet.fullscreen_timer):
+        t.stop()
+    hud = RadarHUD(pet)
+    pet.set_hud(hud)
+    pet.show()
+    hud.show()
+    app.processEvents()
+    assert pet.isVisible() and hud.isVisible()
+
+    orig_poop_disabled = pet.is_poop_disabled
+    try:
+        # 1) 进入全屏：两个窗口都隐藏
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=True):
+            pet.on_fullscreen_watch()
+        assert pet._hidden_for_fullscreen is True
+        assert not pet.isVisible(), "全屏应用前台时桌宠必须隐藏（否则置顶窗口会让游戏掉帧）"
+        assert not hud.isVisible(), "全屏应用前台时仪表盘也必须隐藏"
+
+        # 2) 全屏期间不生成大便窗（否则又是一个压到游戏上的置顶窗口）
+        pet.is_poop_disabled = False
+        before = len(pet.active_poops)
+        pet.spawn_poop_at_tail()
+        assert len(pet.active_poops) == before, "全屏期间不应该生成大便窗"
+
+        # 3) 退出全屏：自动回来
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=False):
+            pet.on_fullscreen_watch()
+        assert pet._hidden_for_fullscreen is False
+        assert pet.isVisible(), "退出全屏后桌宠应该回来"
+        assert hud.isVisible(), "退出全屏后仪表盘应该回来"
+
+        # 4) 用户自己关掉的仪表盘，不该被全屏巡检顺手打开
+        hud.hide()
+        app.processEvents()
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=True):
+            pet.on_fullscreen_watch()
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=False):
+            pet.on_fullscreen_watch()
+        assert not hud.isVisible(), "用户手动关掉的仪表盘被全屏巡检强行打开了"
+        assert pet.isVisible()
+    finally:
+        pet.is_poop_disabled = orig_poop_disabled
+        hud.close()
+        pet.close()
+
+    print("PASS: test_fullscreen_app_hides_pet_and_hud")
+
+
+def test_repaints_only_when_something_changed():
+    """发呆时不再每 60ms 空重绘一次；仪表盘数值没变也不重绘雷达。"""
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from cockatiel_window import CockatielWindow
+    from radar_hud import RadarHUD
+
+    pet = CockatielWindow()
+    for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer, pet.fullscreen_timer):
+        t.stop()
+    pet.show()
+    app.processEvents()
+
+    # --- 桌宠：同一造型连续巡检不应重复 update ---
+    pet.switch_behavior(BEHAVIOR_CATALOG[BehaviorType.IDLE_BLINK], 300.0, None)
+    app.processEvents()
+    calls = {"n": 0}
+    pet.update = lambda *a, **k: calls.__setitem__("n", calls["n"] + 1)
+    pet._idle_painted_key = None
+
+    pet.on_idle_tick()
+    first = calls["n"]
+    assert first == 1, f"换了造型必须重绘一次，实际 {first}"
+    for _ in range(5):
+        pet.on_idle_tick()          # 造型没变，时间也没走
+    assert calls["n"] == first, f"造型没变却重绘了 {calls['n'] - first} 次"
+
+    # 强制让眨眼到来：造型变了 → 必须重绘
+    pet._blink_until = pet._idle_elapsed_ms() + 50
+    pet.on_idle_tick()
+    assert calls["n"] > first, "造型变了却没有重绘"
+
+    # --- 仪表盘：数值没变不应重绘雷达 ---
+    hud = RadarHUD(pet)
+    pet.set_hud(hud)
+    radar_paints = []
+    hud.radar_canvas.update = lambda *a, **k: radar_paints.append(1)
+    hud._radar_key = None
+    hud.update_view()
+    n1 = len(radar_paints)
+    assert n1 == 1, "首次更新应该重绘雷达"
+    for _ in range(5):
+        hud.update_view()
+    assert len(radar_paints) == n1, f"四维数值没变却重绘了 {len(radar_paints) - n1} 次雷达"
+
+    # 数值变化（取整后不同）→ 必须重绘
+    pet.mood.fright = min(100.0, pet.mood.fright + 20.0)
+    hud.update_view()
+    assert len(radar_paints) == n1 + 1, "四维数值变化后没有重绘雷达"
+
+    hud.close()
+    pet.close()
+    print("PASS: test_repaints_only_when_something_changed")
+
+
 def test_head_chin_hit_zone():
     app = QApplication.instance()
     if app is None:
@@ -702,7 +819,7 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.1.0", f"APP_VERSION should be '0.1.0', got {APP_VERSION}"
+    assert APP_VERSION == "0.1.1", f"APP_VERSION should be '0.1.1', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
@@ -1177,6 +1294,8 @@ if __name__ == "__main__":
     test_crest_switch_during_grand_stage_keeps_canvas()
     test_hud_debug_action_panel_dev_vs_release()
     test_windows_do_not_steal_foreground_focus()
+    test_fullscreen_app_hides_pet_and_hud()
+    test_repaints_only_when_something_changed()
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()

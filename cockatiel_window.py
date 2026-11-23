@@ -12,6 +12,7 @@ from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBo
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS, STAGE_STUNT_BEHAVIORS, SELF_AMUSEMENT_BEHAVIORS
 from config import get_base_dir, is_dev_mode, is_poop_disabled, set_poop_disabled
+from fullscreen_watch import is_fullscreen_app_foreground
 from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_updater_and_exit, APP_VERSION
 from poop_item_window import PoopItemWindow
@@ -59,6 +60,8 @@ class CockatielWindow(QWidget):
         self._next_blink: float = 0.0
         self._next_twitch: float = 0.0
         self._next_crest: float = 0.0
+        # 上一次真正画到屏幕上的待机造型 (造型, 朝向)，用来避免无变化时的空重绘
+        self._idle_painted_key = None
 
         # 鼠标拖拽状态与预定待执行行为
         self.is_dragging: bool = False
@@ -130,6 +133,14 @@ class CockatielWindow(QWidget):
         self.poop_timer = QTimer(self)
         self.poop_timer.timeout.connect(self.on_poop_timer_tick)
         self._schedule_next_poop()
+
+        # 全屏应用巡检 (2s)：全屏游戏/全屏视频期间自动隐身，退出后原样回来。
+        # 置顶窗口压在游戏画面上会让游戏失去独立翻转(MPO)，是掉帧的主要来源。
+        self._hidden_for_fullscreen: bool = False
+        self._hud_visible_before_fullscreen: bool = False
+        self.fullscreen_timer = QTimer(self)
+        self.fullscreen_timer.timeout.connect(self.on_fullscreen_watch)
+        self.fullscreen_timer.start(2000)
 
         # 啃咬植物动画镜像状态与原点坐标记录
         self.is_plant_chew_mirrored: bool = False
@@ -303,6 +314,32 @@ class CockatielWindow(QWidget):
 
     def set_hud(self, hud):
         self.hud_window = hud
+
+    def on_fullscreen_watch(self):
+        """每 2 秒巡检前台：全屏应用（游戏/全屏视频）期间隐身，退出后原样恢复。
+
+        置顶窗口压在无边框全屏的游戏上会让它失去独立翻转(MPO)，每帧多一次桌面合成；
+        同时任何新窗口都有抢走键鼠焦点的风险。全屏时干脆让桌宠和仪表盘都躲开。
+        """
+        if getattr(self, "is_exiting", False):
+            return
+
+        in_fullscreen = is_fullscreen_app_foreground(exclude_pid=os.getpid())
+
+        if in_fullscreen and not self._hidden_for_fullscreen:
+            self._hidden_for_fullscreen = True
+            self._hud_visible_before_fullscreen = bool(
+                self.hud_window and self.hud_window.isVisible())
+            if self.hud_window:
+                self.hud_window.hide()
+            self.hide()
+            self.last_feedback = "检测到全屏应用，桌宠已临时隐身（退出全屏自动回来）"
+        elif not in_fullscreen and self._hidden_for_fullscreen:
+            self._hidden_for_fullscreen = False
+            self.show()
+            if self.hud_window and self._hud_visible_before_fullscreen:
+                self.hud_window.show()
+            self.last_feedback = "已退出全屏应用，桌宠回来啦~"
 
 
     def get_config_path(self) -> str:
@@ -549,6 +586,8 @@ class CockatielWindow(QWidget):
 
     def on_idle_tick(self):
         """待机微动画：呼吸 / 眨眼 / 冠羽，事件驱动、间隔随机。"""
+        if self._hidden_for_fullscreen:
+            return
         if self.current_behavior.code != BehaviorType.IDLE_BLINK:
             return
         t = self._idle_elapsed_ms()
@@ -564,7 +603,13 @@ class CockatielWindow(QWidget):
         if t >= self._next_breath:
             self._breath_until = t + 600
             self._next_breath = t + random.uniform(4000, 9000)
-        self.update()
+        # 只有画面真的变了才重绘：这个巡检 60ms 一轮，绝大多数时刻姿态没变，
+        # 无脑 update() 会让桌宠每秒白重绘 16 次（实测 93% 是无效重绘），
+        # 多出来的合成会让全屏游戏掉帧、平时也更费电。
+        key = (self._idle_frame_name(), self.facing_direction)
+        if key != self._idle_painted_key:
+            self._idle_painted_key = key
+            self.update()
 
     def get_current_pixmap(self) -> QPixmap:
         # 待机状态走微动画（呼吸下沉 / 随机眨眼 / 冠羽切换）
@@ -1095,6 +1140,7 @@ class CockatielWindow(QWidget):
             # 进入待机时重置微动画的随机时间表（每次待机的节奏都不同）
             if new_b_def.code == BehaviorType.IDLE_BLINK:
                 self._idle_t0 = time.monotonic()
+                self._idle_painted_key = None   # 强制下一轮巡检重绘一次
                 self._idle_relaxed = False
                 self._twitch_until = -1.0
                 self._next_twitch = random.uniform(6000, 12000)
@@ -1301,6 +1347,9 @@ class CockatielWindow(QWidget):
         """定期巡检排便生理状态 (每 5 秒)"""
         if self.is_poop_disabled:
             return
+        if self._hidden_for_fullscreen:
+            # 全屏应用中不触发排便，等退回桌面再说（便意模型用的是绝对时间，不会丢）
+            return
         if self.is_dragging or self.is_flying:
             return
         if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):
@@ -1337,6 +1386,9 @@ class CockatielWindow(QWidget):
     def spawn_poop_at_tail(self):
         """在尾部排泄口位置生成大便实体悬浮窗并重置便意概率"""
         if self.is_poop_disabled:
+            return
+        if self._hidden_for_fullscreen:
+            # 全屏应用中：绝不新建置顶窗口（会压到游戏画面上并可能抢焦点）
             return
 
         # 鸟面向左 (-1) 时，泄殖腔在右侧；面向右 (1) 时在左侧 (适配 26x22 紧凑马赛克大便)
@@ -1716,6 +1768,8 @@ class CockatielWindow(QWidget):
 
     def on_anim_frame_step(self):
         """动画帧步进"""
+        if self._hidden_for_fullscreen:
+            return
         frames = self.current_behavior.frames
         intervals = getattr(self.current_behavior, 'frame_intervals_ms', None)
         if len(frames) > 1:
@@ -1960,6 +2014,9 @@ class CockatielWindow(QWidget):
 
     def on_main_tick(self):
         """主业务循环 (100ms)"""
+        if self._hidden_for_fullscreen:
+            # 全屏应用期间整体暂停：不重绘、不移动、不切行为，退出全屏直接续上
+            return
         now = time.time()
         # 1. 心态动力学更新与衰减
         self.mood.update_tick(0.1, self.current_behavior.code)

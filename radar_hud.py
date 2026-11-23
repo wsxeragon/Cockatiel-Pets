@@ -46,6 +46,8 @@ class RadarHUD(QWidget):
             self.setFixedSize(320, 390)
         self.setWindowFlags(Qt.Window | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
+        # 上一次重绘雷达用的四维取值，用来避免数值没变时的空重绘
+        self._radar_key = None
 
         self.setStyleSheet("""
             QWidget {
@@ -319,16 +321,36 @@ class RadarHUD(QWidget):
         self.pet.clear_fatigue("控制面板注入：疲劳度已直接清空！")
         self.last_event_label.setText("最新事件: 清空疲劳 (疲劳归零)")
 
+    @staticmethod
+    def _set_label(label, text: str):
+        """内容没变就不 setText，省掉一次无谓的布局与重绘。"""
+        if label.text() != text:
+            label.setText(text)
+
     def update_view(self):
+        """只在显示内容真的变化时才更新控件 / 重绘雷达。
+
+        这个函数被主循环每 100ms 调一次；以前每次都无条件重绘 320x390 的雷达画布，
+        等于每秒 10 次空重绘——桌宠压在游戏画面上时这些合成都会拖帧。
+        """
         m = self.pet.mood
         curr_b = self.pet.current_behavior
         rem_t = max(0.0, self.pet.action_end_time - self.pet.get_now())
-        self.state_label.setText(f"当前行为: <b>{curr_b.name_cn}</b> (剩余 {rem_t:.1f}s)")
-        self.last_event_label.setText(f"最新事件: {self.pet.last_feedback}")
-        self.fatigue_label.setText(f"疲劳 {m.fatigue:.1f} / 100")
-        self.fatigue_bar.setValue(round(m.fatigue))
+        # 10 秒内才显示一位小数；否则整数秒（否则这个标签每秒要重绘 10 次）
+        rem_txt = f"{rem_t:.1f}" if rem_t < 10.0 else f"{rem_t:.0f}"
+        self._set_label(self.state_label, f"当前行为: <b>{curr_b.name_cn}</b> (剩余 {rem_txt}s)")
+        self._set_label(self.last_event_label, f"最新事件: {self.pet.last_feedback}")
+        self._set_label(self.fatigue_label, f"疲劳 {m.fatigue:.1f} / 100")
 
-        self.radar_canvas.update()
+        bar_val = round(m.fatigue)
+        if bar_val != self.fatigue_bar.value():
+            self.fatigue_bar.setValue(bar_val)
+
+        # 雷达按"取整后的四维值"判断是否需要重绘，视觉上看不出差别
+        key = (int(m.fright), int(m.excitement), int(m.comfort), int(m.calm))
+        if key != self._radar_key:
+            self._radar_key = key
+            self.radar_canvas.update()
 
 class RadarCanvas(QWidget):
     """绘制四维心态雷达图的绘图组件"""

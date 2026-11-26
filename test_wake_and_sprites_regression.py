@@ -520,6 +520,9 @@ def test_fullscreen_app_hides_pet_and_hud():
     pet = CockatielWindow()
     for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer, pet.fullscreen_timer):
         t.stop()
+    # 本用例验证的是"隐身机制本身"，前提是开关处于默认的开启状态；
+    # 真实 assets/app_config.json 可能被用户/其他用例改过，这里显式置位而不是依赖配置。
+    pet.hide_on_fullscreen = True
     hud = RadarHUD(pet)
     pet.set_hud(hud)
     pet.show()
@@ -621,6 +624,99 @@ def test_repaints_only_when_something_changed():
     hud.close()
     pet.close()
     print("PASS: test_repaints_only_when_something_changed")
+
+
+def test_fullscreen_hide_toggle_in_menu():
+    """右键菜单「全屏时自动隐藏」默认勾选；取消勾选后全屏也不再隐身，且状态会持久化。"""
+    import tempfile
+    from pathlib import Path
+    from unittest import mock
+
+    app = QApplication.instance()
+    if app is None:
+        app = QApplication(sys.argv)
+
+    from PySide6.QtCore import QPoint
+    from PySide6.QtWidgets import QMenu
+    from cockatiel_window import CockatielWindow
+    from radar_hud import RadarHUD
+    from config import is_hide_on_fullscreen, set_hide_on_fullscreen
+
+    # 1. 配置读写：默认开，可持久化（写到临时目录，不碰用户真实配置）
+    with tempfile.TemporaryDirectory() as td:
+        tmp_cfg = Path(td) / "app_config.json"
+        with mock.patch("config.get_config_path", return_value=tmp_cfg):
+            assert is_hide_on_fullscreen() is True, "默认应当是勾选状态"
+            set_hide_on_fullscreen(False)
+            assert is_hide_on_fullscreen() is False
+            set_hide_on_fullscreen(True)
+            assert is_hide_on_fullscreen() is True
+
+    pet = CockatielWindow()
+    for t in (pet.main_timer, pet.anim_timer, pet.idle_timer, pet.poop_timer, pet.fullscreen_timer):
+        t.stop()
+    # 真实配置里的取值可能已被用户改过，本用例先把开关复位成默认的开启状态
+    pet.hide_on_fullscreen = True
+    hud = RadarHUD(pet)
+    pet.set_hud(hud)
+    pet.show()
+    hud.show()
+    app.processEvents()
+
+    saved = []
+    seen_texts = []
+
+    class MockMenu(QMenu):
+        def exec(self, *args, **kwargs):
+            seen_texts.clear()
+            seen_texts.extend(a.text() for a in self.actions())
+            for a in self.actions():
+                if "全屏时自动隐藏" in a.text():
+                    assert a.isCheckable(), "「全屏时自动隐藏」必须是可勾选项"
+                    a.setChecked(not a.isChecked())   # 模拟用户点击翻转勾选
+                    return a
+            return None
+
+    try:
+        # 2. 菜单项存在且默认勾选
+        assert pet.hide_on_fullscreen is True
+        with mock.patch("cockatiel_window.QMenu", MockMenu), \
+             mock.patch("cockatiel_window.set_hide_on_fullscreen", side_effect=saved.append), \
+             mock.patch("cockatiel_window.is_dev_mode", return_value=False):
+            pet.show_context_menu(QPoint(10, 10))
+        assert any("全屏时自动隐藏" in t for t in seen_texts), f"菜单里没有该选项: {seen_texts}"
+        assert pet.hide_on_fullscreen is False, "取消勾选后内存状态应为 False"
+        assert saved == [False], f"应当把 False 写回配置，实际: {saved}"
+
+        # 3. 关掉之后：即使前台是全屏应用也不隐藏
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=True):
+            pet.on_fullscreen_watch()
+        assert pet._hidden_for_fullscreen is False and pet.isVisible(), "关闭后不应再自动隐身"
+
+        # 4. 再点一次打开：恢复隐身
+        saved.clear()
+        with mock.patch("cockatiel_window.QMenu", MockMenu), \
+             mock.patch("cockatiel_window.set_hide_on_fullscreen", side_effect=saved.append), \
+             mock.patch("cockatiel_window.is_dev_mode", return_value=False):
+            pet.show_context_menu(QPoint(10, 10))
+        assert pet.hide_on_fullscreen is True, "再点一次应重新勾选"
+        assert saved == [True], f"应当把 True 写回配置，实际: {saved}"
+
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=True):
+            pet.on_fullscreen_watch()
+        assert pet._hidden_for_fullscreen is True and not pet.isVisible(), "重新开启后应恢复自动隐身"
+
+        # 5. 从"已隐身"状态直接把开关关掉，应立即放出来
+        pet.hide_on_fullscreen = False
+        with mock.patch("cockatiel_window.is_fullscreen_app_foreground", return_value=True):
+            pet.on_fullscreen_watch()
+        assert pet.isVisible(), "关闭开关后即使检测到全屏也应立刻显示"
+    finally:
+        pet.show()
+        hud.close()
+        pet.close()
+
+    print("PASS: test_fullscreen_hide_toggle_in_menu")
 
 
 def test_head_chin_hit_zone():
@@ -819,7 +915,7 @@ def test_updater_version_and_integration():
     from config import APP_VERSION
 
     # 1. 验证版本号纯数字定义（无 V 前缀）
-    assert APP_VERSION == "0.1.2", f"APP_VERSION should be '0.1.2', got {APP_VERSION}"
+    assert APP_VERSION == "0.1.3", f"APP_VERSION should be '0.1.3', got {APP_VERSION}"
     assert not APP_VERSION.lower().startswith("v"), "APP_VERSION must NOT start with 'v' or 'V'!"
 
     # 2. 验证多形态版本号解析与比较（严格去除 V / v，纯数字比较）
@@ -1296,6 +1392,7 @@ if __name__ == "__main__":
     test_windows_do_not_steal_foreground_focus()
     test_fullscreen_app_hides_pet_and_hud()
     test_repaints_only_when_something_changed()
+    test_fullscreen_hide_toggle_in_menu()
     test_head_chin_hit_zone()
     test_sleep_unmirrored_z_both_directions()
     test_head_pet_probabilistic_preen_flow()

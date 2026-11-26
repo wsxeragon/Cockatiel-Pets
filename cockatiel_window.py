@@ -11,7 +11,8 @@ from PySide6.QtGui import QPixmap, QPainter, QCursor, QAction, QTransform, QIcon
 from PySide6.QtWidgets import QWidget, QMenu, QApplication, QToolTip, QMessageBox, QProgressDialog
 
 from models import MoodDynamics, BehaviorType, BEHAVIOR_CATALOG, BehaviorDef, EXCITED_BEHAVIORS, STAGE_STUNT_BEHAVIORS, SELF_AMUSEMENT_BEHAVIORS
-from config import get_base_dir, is_dev_mode, is_poop_disabled, set_poop_disabled
+from config import (get_base_dir, is_dev_mode, is_poop_disabled, set_poop_disabled,
+                    is_hide_on_fullscreen, set_hide_on_fullscreen)
 from fullscreen_watch import is_fullscreen_app_foreground
 from autostart import is_auto_start_supported, is_auto_start_enabled, set_auto_start
 from updater import CheckUpdateWorker, DownloadUpdateWorker, launch_updater_and_exit, APP_VERSION
@@ -136,6 +137,7 @@ class CockatielWindow(QWidget):
 
         # 全屏应用巡检 (2s)：全屏游戏/全屏视频期间自动隐身，退出后原样回来。
         # 置顶窗口压在游戏画面上会让游戏失去独立翻转(MPO)，是掉帧的主要来源。
+        self.hide_on_fullscreen: bool = is_hide_on_fullscreen()
         self._hidden_for_fullscreen: bool = False
         self._hud_visible_before_fullscreen: bool = False
         self.fullscreen_timer = QTimer(self)
@@ -315,13 +317,28 @@ class CockatielWindow(QWidget):
     def set_hud(self, hud):
         self.hud_window = hud
 
+    def _restore_after_fullscreen(self):
+        """从"全屏隐身"状态恢复：桌宠与（原本开着的）仪表盘重新显示。"""
+        self._hidden_for_fullscreen = False
+        self.show()
+        if self.hud_window and self._hud_visible_before_fullscreen:
+            self.hud_window.show()
+
     def on_fullscreen_watch(self):
         """每 2 秒巡检前台：全屏应用（游戏/全屏视频）期间隐身，退出后原样恢复。
 
         置顶窗口压在无边框全屏的游戏上会让它失去独立翻转(MPO)，每帧多一次桌面合成；
         同时任何新窗口都有抢走键鼠焦点的风险。全屏时干脆让桌宠和仪表盘都躲开。
+        右键菜单里"全屏时自动隐藏"可关闭该行为（默认开启）。
         """
         if getattr(self, "is_exiting", False):
+            return
+
+        # 用户关掉了自动隐藏：若之前已经藏起来，立刻放回来
+        if not self.hide_on_fullscreen:
+            if self._hidden_for_fullscreen:
+                self._restore_after_fullscreen()
+                self.last_feedback = "已关闭全屏自动隐藏，桌宠回来啦~"
             return
 
         in_fullscreen = is_fullscreen_app_foreground(exclude_pid=os.getpid())
@@ -335,10 +352,7 @@ class CockatielWindow(QWidget):
             self.hide()
             self.last_feedback = "检测到全屏应用，桌宠已临时隐身（退出全屏自动回来）"
         elif not in_fullscreen and self._hidden_for_fullscreen:
-            self._hidden_for_fullscreen = False
-            self.show()
-            if self.hud_window and self._hud_visible_before_fullscreen:
-                self.hud_window.show()
+            self._restore_after_fullscreen()
             self.last_feedback = "已退出全屏应用，桌宠回来啦~"
 
 
@@ -2789,6 +2803,10 @@ class CockatielWindow(QWidget):
         act_clear_fatigue = menu.addAction("⚡ 清空疲劳 (瞬间回满)")
         act_sleep = menu.addAction("💤 强制睡眠 (疲劳拉满)")
         act_clean_poop = menu.addAction("🧹 一键铲屎 (清理所有便便)")
+        # 7. 全屏时自动隐身 (默认开启；关掉后全屏游戏里桌宠会留在画面上)
+        act_hide_fullscreen = menu.addAction("🖥️ 全屏时自动隐藏")
+        act_hide_fullscreen.setCheckable(True)
+        act_hide_fullscreen.setChecked(self.hide_on_fullscreen)
 
         # 仅开发调试模式显示的注入选项
         if dev_mode:
@@ -2882,6 +2900,18 @@ class CockatielWindow(QWidget):
         elif res == act_clean_poop:
             count = self.clean_all_poop("右键菜单触发：一键铲屎！")
             tip_msg = f"🧹 已清理 {count} 坨便便，桌面干干净净！" if count > 0 else "✨ 桌面很干净，没有便便需要清理哦~"
+            QToolTip.showText(global_pos, tip_msg, self)
+        elif res == act_hide_fullscreen:
+            # 勾选状态由菜单自己翻转，这里以 isChecked() 为准，避免二次取反
+            self.hide_on_fullscreen = act_hide_fullscreen.isChecked()
+            set_hide_on_fullscreen(self.hide_on_fullscreen)
+            if self.hide_on_fullscreen:
+                tip_msg = "🖥️ 已开启：全屏游戏/视频时桌宠自动隐身"
+            else:
+                tip_msg = "🖥️ 已关闭：全屏时桌宠会留在画面上（可能影响游戏帧数）"
+            self.last_feedback = tip_msg
+            if self.hud_window:
+                self.hud_window.update_view()
             QToolTip.showText(global_pos, tip_msg, self)
         elif act_sing and res == act_sing:
             if self.current_behavior.code in (BehaviorType.REST_SLEEP, BehaviorType.REST_FALL_ASLEEP):

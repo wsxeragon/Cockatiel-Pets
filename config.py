@@ -4,7 +4,7 @@ import json
 from pathlib import Path
 
 # 当前应用版本号（不带 V 前缀）
-APP_VERSION = "0.1.2"
+APP_VERSION = "0.1.3"
 
 def get_base_dir() -> Path:
     """获取运行根目录（自动兼容 PyInstaller 打包环境与源码开发环境）"""
@@ -82,6 +82,34 @@ def set_poop_disabled(disabled: bool) -> None:
         except Exception:
             data = {}
     data["disable_poop"] = disabled
+    cfg_file.parent.mkdir(parents=True, exist_ok=True)
+    with open(cfg_file, "w", encoding="utf-8") as f:
+        json.dump(data, f, indent=2, ensure_ascii=False)
+
+def is_hide_on_fullscreen() -> bool:
+    """前台有全屏应用时是否自动隐身 (默认 True)"""
+    cfg_file = get_config_path()
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                if "hide_on_fullscreen" in data and isinstance(data["hide_on_fullscreen"], bool):
+                    return data["hide_on_fullscreen"]
+        except Exception:
+            pass
+    return True
+
+def set_hide_on_fullscreen(hide: bool) -> None:
+    """保存"全屏时自动隐身"配置至 assets/app_config.json"""
+    cfg_file = get_config_path()
+    data = {}
+    if cfg_file.exists():
+        try:
+            with open(cfg_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            data = {}
+    data["hide_on_fullscreen"] = hide
     cfg_file.parent.mkdir(parents=True, exist_ok=True)
     with open(cfg_file, "w", encoding="utf-8") as f:
         json.dump(data, f, indent=2, ensure_ascii=False)

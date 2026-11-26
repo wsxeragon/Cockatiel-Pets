@@ -265,12 +265,12 @@ class CockatielWindow(QWidget):
         return canvas
 
     def _settle_pending_geometry(self):
-        """大舞台 → 大舞台 连跳时，先把"回到标准 100x80 画布"这条待办落地。
+        """大舞台 → 大舞台 连跳时，先把窗口"挪"到标准画布该在的位置（不改尺寸）。
 
-        否则紧接着的"进入下一个大舞台"会拿还没收缩的旧窗口坐标去算落点，
-        而 switch_behavior 末尾又会把待办里的 100x80 应用一遍，最终窗口卡在
-        100x80、贴图却是 200x110，整段动画被 paintEvent 整帧丢弃（鸟直接消失）。
-        两次 setGeometry 都发生在 setUpdatesEnabled(False) 区间内，中间不会出画。
+        exit 分支记下的待办是"回到 100x80 的位置与尺寸"，但紧接着要进入下一个大舞台。
+        若真的先缩到 100x80 再放大，同一个消息里会发生两次 resize，两次都没有过渡帧，
+        桌面上就会连续闪两下。这里只把位置挪对、尺寸保持不变，让接下来的"进入大舞台"
+        变成唯一一次 resize，交给 _flush_pending_geometry 统一处理。
         """
         pending = getattr(self, '_pending_geometry', None)
         if not pending:
@@ -278,7 +278,7 @@ class CockatielWindow(QWidget):
         self._pending_geometry = None
         x, y, w, h, margin = pending
         target_x, target_y = self._clamp_geometry(x, y, w, h, margin)
-        self.apply_window_geometry(target_x, target_y, w, h, margin=margin)
+        self.move(target_x, target_y)
 
     def _flush_pending_geometry(self):
         """更新开关重新打开之后再换画布，保证屏幕上先有正确内容、再改窗口尺寸。"""
@@ -875,6 +875,7 @@ class CockatielWindow(QWidget):
         return out
 
     def switch_behavior(self, new_b_def: BehaviorDef, duration: Optional[float] = None, feedback: str = None):
+        size_before = (self.width(), self.height())
         self.setUpdatesEnabled(False)
         try:
             old_behavior_code = self.current_behavior.code if self.current_behavior else None
@@ -1041,7 +1042,7 @@ class CockatielWindow(QWidget):
                 target_y = self.y() + 72 - 98
                 target_x = max(rect.left() + 10, min(rect.right() - 260 - 10, target_x))
                 target_y = max(rect.top() + 10, min(rect.bottom() - 120 - 10, target_y))
-                self.apply_window_geometry(target_x, target_y, 260, 120, margin=10)
+                self._pending_geometry = (target_x, target_y, 260, 120, 10)
                 self.facing_direction = -1
                 duration = 60.0  # 提供充分的冗余时间，由最后一帧自然驱动谢幕切出，绝不被时钟截断
 
@@ -1070,7 +1071,7 @@ class CockatielWindow(QWidget):
                     self.facing_direction = -1
 
                 target_y = self.y() - 10
-                self.apply_window_geometry(target_x, target_y, 240, 90, margin=10)
+                self._pending_geometry = (target_x, target_y, 240, 90, 10)
                 duration = 60.0
 
             # 进入变魔术时，临时扩容为 260x120 舞台，并无缝贴合原站立点
@@ -1103,7 +1104,7 @@ class CockatielWindow(QWidget):
                     self.facing_direction = -1
 
                 target_y = self.y() - 26
-                self.apply_window_geometry(target_x, target_y, 260, 120, margin=10)
+                self._pending_geometry = (target_x, target_y, 260, 120, 10)
                 duration = 60.0
 
             # 进入滑板时，临时扩容为 200x110 舞台，并无缝贴合原站立点
@@ -1116,7 +1117,7 @@ class CockatielWindow(QWidget):
                 is_mirrored = getattr(self, 'is_skateboard_mirrored', False)
                 target_x = self.x() - (49 if is_mirrored else 51)
                 target_y = self.y() - 14
-                self.apply_window_geometry(target_x, target_y, 200, 110, margin=10)
+                self._pending_geometry = (target_x, target_y, 200, 110, 10)
                 self.skateboard_exact_x = float(self.x())
                 duration = 60.0
 
@@ -1127,7 +1128,7 @@ class CockatielWindow(QWidget):
                 is_mirrored = getattr(self, 'is_unicycle_mirrored', False)
                 target_x = self.x() - (86 if is_mirrored else 54)
                 target_y = self.y() - 68
-                self.apply_window_geometry(target_x, target_y, 240, 160, margin=10)
+                self._pending_geometry = (target_x, target_y, 240, 160, 10)
                 self.unicycle_exact_x = float(self.x())
                 duration = 60.0
 
@@ -1140,7 +1141,7 @@ class CockatielWindow(QWidget):
                     self._table_mischief_orig_y = self.y()
                     target_x = self.x() - 110
                     target_y = self.y() - 101
-                    self.apply_window_geometry(target_x, target_y, 320, 200, margin=10)
+                    self._pending_geometry = (target_x, target_y, 320, 200, 10)
                 duration = 60.0
 
             # 从高阶大舞台特技切出时 (打断或结束)，自动清空兴奋值 (自嗨小动作不清空兴奋槽)
@@ -1229,6 +1230,17 @@ class CockatielWindow(QWidget):
             self.setUpdatesEnabled(True)
         # 大舞台收尾：画面刷新恢复后，先把换装后的画面贴到旧尺寸窗口上，再缩窗口
         self._flush_pending_geometry()
+        # 画布尺寸只要变过，就立刻同步重绘一次。
+        # 放大方向没有预合成过渡帧，若把这一帧留给异步的 update()，系统会先拿旧的
+        # 小画布按新的大窗口合成一帧（旧图塞在左上角），桌面上就是"进场闪一下"。
+        if (self.width(), self.height()) != size_before:
+            self.repaint()
+        # 滑板/独轮用浮点累加器做亚像素位移，起点必须等几何真正落地之后再取，
+        # 否则会拿着"进入大舞台之前"的旧坐标当基准，第一帧就跳一下
+        if new_b_def.code == BehaviorType.SKATEBOARD:
+            self.skateboard_exact_x = float(self.x())
+        elif new_b_def.code == BehaviorType.UNICYCLE:
+            self.unicycle_exact_x = float(self.x())
         self.update()
 
     def wake_up(self, reason: str):
